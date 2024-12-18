@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,7 +17,7 @@ import (
 )
 
 // ---- const
-const StockCode = "0951"
+const StockCode = "8113"
 const OutputDir = "RawData/"
 
 type TermEnum int
@@ -33,24 +34,26 @@ const (
 
 // 銘柄情報構造体
 type StockBrandInformation struct {
-	ParseDate      time.Time        `json:"parsedate"`  //	日付
-	Opening        float64          `json:"opening"`    //	始値
-	High           float64          `json:"high"`       //	高値
-	Low            float64          `json:"low"`        //	安値
-	Closing        float64          `json:"closing"`    //	終値
-	Volume         float64          `json:"volume"`     //	出来高
-	MovingAve      [TermNum]float64 `json:"movingave"`  // 移動平均配列
-	Volatility     [TermNum]float64 `json:"volatility"` // ボラティリティ(標準偏差)
-	UpperBBand     [TermNum]float64 `json:"upperbband"` // ボリンジャーバンド(上)
-	UnderBBand     [TermNum]float64 `json:"underbband"` // ボリンジャーバンド(下)
-	MADRate        [TermNum]float64 `json:"madrate"`    // 移動平均線乖離率
-	RSI            [TermNum]float64 `json:"rsi"`        // Relative Strength Index
-	ShortMACDVal   float64          `json:"smacdval"`   // MACD値(短期間)
-	ShortMACDSig   float64          `json:"smacdsig"`   // MACDシグナルライン(短期間)
-	ShortMACDHisto float64          `json:"smacdhisto"` // MACDヒストグラム(短期間)
-	LongMACDVal    float64          `json:"lmacdval"`   // MACD値(長期間)
-	LongMACDSig    float64          `json:"lmacdsig"`   // MACDシグナルライン(長期間)
-	LongMACDHisto  float64          `json:"lmacdhisto"` // MACDヒストグラム(長期間)
+	ParseDate         time.Time        `json:"parsedate"`         //	日付
+	Opening           float64          `json:"opening"`           //	始値
+	High              float64          `json:"high"`              //	高値
+	Low               float64          `json:"low"`               //	安値
+	Closing           float64          `json:"closing"`           //	終値
+	Volume            float64          `json:"volume"`            //	出来高
+	MovingAve         [TermNum]float64 `json:"movingave"`         // 移動平均配列
+	Volatility        [TermNum]float64 `json:"volatility"`        // ボラティリティ(標準偏差)
+	HighLowVolatility [TermNum]float64 `json:"highlowvolatility"` // ボラティリティ(高値と安値)
+	ATR               [TermNum]float64 `json:"atr"`               // ATR
+	UpperBBand        [TermNum]float64 `json:"upperbband"`        // ボリンジャーバンド(上)
+	UnderBBand        [TermNum]float64 `json:"underbband"`        // ボリンジャーバンド(下)
+	MADRate           [TermNum]float64 `json:"madrate"`           // 移動平均線乖離率
+	RSI               [TermNum]float64 `json:"rsi"`               // Relative Strength Index
+	ShortMACDVal      float64          `json:"smacdval"`          // MACD値(短期間)
+	ShortMACDSig      float64          `json:"smacdsig"`          // MACDシグナルライン(短期間)
+	ShortMACDHisto    float64          `json:"smacdhisto"`        // MACDヒストグラム(短期間)
+	LongMACDVal       float64          `json:"lmacdval"`          // MACD値(長期間)
+	LongMACDSig       float64          `json:"lmacdsig"`          // MACDシグナルライン(長期間)
+	LongMACDHisto     float64          `json:"lmacdhisto"`        // MACDヒストグラム(長期間)
 }
 
 // ---- Global Variable
@@ -281,7 +284,6 @@ func readCSVInsertData(csvName string) ([]StockBrandInformation, bool) {
 			}
 
 			var single StockBrandInformation
-			var tempInt int
 			/*
 				v[0] = v[0] + " 00:00:00"
 				single.ParseDate, _ = time.Parse(time.DateTime, v[0])
@@ -290,16 +292,11 @@ func readCSVInsertData(csvName string) ([]StockBrandInformation, bool) {
 			if err != nil {
 				slog.Info("err", "err", err)
 			}
-			tempInt, _ = strconv.Atoi(v[1])
-			single.Opening = float64(tempInt)
-			tempInt, _ = strconv.Atoi(v[2])
-			single.High = float64(tempInt)
-			tempInt, _ = strconv.Atoi(v[3])
-			single.Low = float64(tempInt)
-			tempInt, _ = strconv.Atoi(v[4])
-			single.Closing = float64(tempInt)
-			tempInt, _ = strconv.Atoi(v[5])
-			single.Volume = float64(tempInt)
+			single.Opening, _ = strconv.ParseFloat(v[1], 64)
+			single.High, _ = strconv.ParseFloat(v[2], 64)
+			single.Low, _ = strconv.ParseFloat(v[3], 64)
+			single.Closing, _ = strconv.ParseFloat(v[4], 64)
+			single.Volume, _ = strconv.ParseFloat(v[5], 64)
 			retData = append(retData, single)
 		}
 		sort.Slice(retData, func(i, j int) bool {
@@ -361,10 +358,16 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 		for i := 0; i < dataLen; i++ {
 
 			const bollingerBandK = 2
-			var price []float64
+			var price, priceDiff, trueRange []float64
 			for idx := i; idx < i+termDay[mAveType]; idx++ {
 				if idx < dataLen {
 					price = append(price, stockData[idx].Closing)
+					priceDiff = append(priceDiff, stockData[idx].High-stockData[idx].Low)
+					if (idx + 1) < dataLen {
+						candidate := []float64{stockData[idx].High - stockData[idx].Low,
+							math.Abs(stockData[idx].High - stockData[idx+1].Closing), math.Abs(stockData[idx].Low - stockData[idx+1].Closing)}
+						trueRange = append(trueRange, slices.Max(candidate))
+					}
 				}
 			}
 			if len(price) == termDay[mAveType] {
@@ -379,6 +382,16 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 				stockData[i].MADRate[mAveType] = math.NaN()
 				stockData[i].UpperBBand[mAveType] = math.NaN()
 				stockData[i].UnderBBand[mAveType] = math.NaN()
+			}
+			if len(priceDiff) == termDay[mAveType] {
+				stockData[i].HighLowVolatility[mAveType] = calcMovingAverage(priceDiff)
+			} else {
+				stockData[i].HighLowVolatility[mAveType] = math.NaN()
+			}
+			if len(trueRange) == termDay[mAveType] {
+				stockData[i].ATR[mAveType] = calcMovingAverage(trueRange)
+			} else {
+				stockData[i].ATR[mAveType] = math.NaN()
 			}
 			// MACD計算用に移動平均を配列化
 			movingAveValue[mAveType] = append(movingAveValue[mAveType], stockData[i].MovingAve[mAveType])
@@ -432,9 +445,10 @@ func csvCreationOneStockBrand(code string) {
 
 	// CSVに出力するように文字列に変換。日付フォーマットを time.DateTime から　yyyy/mm/dd へ変更する。
 	var outputStr [][]string
-	var lineStr []string = []string{"date", "Opening", "High", "Low", "Closing", "Volume", "MovingAve5", "MovingAve14", "MovingAve30", "Volatility5", "Volatility14", "Volatility30",
+	var lineStr []string = []string{"date", "Opening", "High", "Low", "Closing", "Volume", "MovingAve5", "MovingAve14", "MovingAve30",
+		"Volatility5", "Volatility14", "Volatility30", "HighLowVolatility5", "HighLowVolatility14", "HighLowVolatility30", "ATR5", "ATR14", "ATR30",
 		"MADRate5", "MADRate14", "MADRate30", "RSI5", "RSI14", "RSI30",
-		"shortMACD", "shortMACDSignal", "shortMACDHisto", "longMACD", "longMACDSignal", "longMACDHisto",
+		"shortMACDSMA", "shortMACDSignalSMA", "shortMACDHistoSMA", "longMACDSMA", "longMACDSignalSMA", "longMACDHistoSMA",
 		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30"}
 	outputStr = append(outputStr, lineStr)
 	for _, c := range synthesisStockData {
@@ -462,10 +476,12 @@ func csvCreationOneStockBrand(code string) {
 				rsiString[i] = strconv.FormatFloat(c.RSI[i], 'f', 2, 64)
 			}
 		}
-		lineStr = append(lineStr, dateSlice[0], strconv.FormatFloat(c.Opening, 'f', 0, 64), strconv.FormatFloat(c.High, 'f', 0, 64), strconv.FormatFloat(c.Low, 'f', 0, 64),
-			strconv.FormatFloat(c.Closing, 'f', 0, 64), strconv.FormatFloat(c.Volume, 'f', 0, 64),
+		lineStr = append(lineStr, dateSlice[0], strconv.FormatFloat(c.Opening, 'f', 2, 64), strconv.FormatFloat(c.High, 'f', 2, 64), strconv.FormatFloat(c.Low, 'f', 2, 64),
+			strconv.FormatFloat(c.Closing, 'f', 2, 64), strconv.FormatFloat(c.Volume, 'f', 2, 64),
 			strconv.FormatFloat(c.MovingAve[Term5], 'f', 2, 64), strconv.FormatFloat(c.MovingAve[Term14], 'f', 2, 64), strconv.FormatFloat(c.MovingAve[Term30], 'f', 2, 64),
 			strconv.FormatFloat(c.Volatility[Term5], 'f', 2, 64), strconv.FormatFloat(c.Volatility[Term14], 'f', 2, 64), strconv.FormatFloat(c.Volatility[Term30], 'f', 2, 64),
+			strconv.FormatFloat(c.HighLowVolatility[Term5], 'f', 2, 64), strconv.FormatFloat(c.HighLowVolatility[Term14], 'f', 2, 64), strconv.FormatFloat(c.HighLowVolatility[Term30], 'f', 2, 64),
+			strconv.FormatFloat(c.ATR[Term5], 'f', 2, 64), strconv.FormatFloat(c.ATR[Term14], 'f', 2, 64), strconv.FormatFloat(c.ATR[Term30], 'f', 2, 64),
 			strconv.FormatFloat(c.MADRate[Term5], 'f', 2, 64), strconv.FormatFloat(c.MADRate[Term14], 'f', 2, 64), strconv.FormatFloat(c.MADRate[Term30], 'f', 2, 64),
 			strconv.FormatFloat(c.RSI[Term5], 'f', 2, 64), strconv.FormatFloat(c.RSI[Term14], 'f', 2, 64), strconv.FormatFloat(c.RSI[Term30], 'f', 2, 64),
 			strconv.FormatFloat(c.ShortMACDVal, 'f', 2, 64), strconv.FormatFloat(c.ShortMACDSig, 'f', 2, 64), strconv.FormatFloat(c.ShortMACDHisto, 'f', 2, 64),
