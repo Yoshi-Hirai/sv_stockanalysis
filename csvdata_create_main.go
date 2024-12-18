@@ -16,6 +16,9 @@ import (
 )
 
 // ---- const
+const StockCode = "0951"
+const OutputDir = "RawData/"
+
 type TermEnum int
 
 const (
@@ -417,7 +420,7 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 func csvCreationOneStockBrand(code string) {
 
 	// csvファイルを読み込んでStockBrandInformationに展開
-	csvFileName := fmt.Sprintf("RawData/%s.csv", code)
+	csvFileName := fmt.Sprintf("%s%s.csv", OutputDir, code)
 	synthesisStockData, isInitialCreation := readCSVInsertData(csvFileName)
 	slog.Info("File Component", "len", len(synthesisStockData))
 
@@ -481,5 +484,5 @@ func csvCreationOneStockBrand(code string) {
 // ---- main
 func main() {
 	//lambda.Start(checkJraEntries)
-	csvCreationOneStockBrand("8113")
+	csvCreationOneStockBrand(StockCode)
 }
