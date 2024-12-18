@@ -105,6 +105,74 @@ func rsi(values []float64, window int) []float64 {
 	return result
 }
 
+// CalculateHighLowVolatility calculates the moving average of (High - Low) for a given window size.
+func CalculateHighLowVolatility(highs, lows []float64, window int) ([]float64, error) {
+	if len(highs) != len(lows) {
+		return nil, fmt.Errorf("length of highs and lows must be the same")
+	}
+	if window <= 0 || len(highs) < window {
+		return nil, fmt.Errorf("invalid window size or insufficient data")
+	}
+
+	volatility := make([]float64, len(highs))
+	for i := 0; i < len(highs); i++ {
+		if i < window-1 {
+			volatility[i] = 0 // Not enough data for the window
+			continue
+		}
+
+		sum := 0.0
+		for j := 0; j < window; j++ {
+			sum += highs[i-j] - lows[i-j]
+		}
+		volatility[i] = sum / float64(window)
+	}
+	return volatility, nil
+}
+
+// CalculateTrueRange calculates the true range for the given High, Low, and Closing prices.
+func CalculateTrueRange(highs, lows, closes []float64) ([]float64, error) {
+	if len(highs) != len(lows) || len(highs) != len(closes) {
+		return nil, fmt.Errorf("length of highs, lows, and closes must be the same")
+	}
+
+	trueRange := make([]float64, len(highs))
+	for i := 0; i < len(highs); i++ {
+		if i == 0 {
+			trueRange[i] = highs[i] - lows[i] // First value, no previous close
+		} else {
+			maxRange := math.Max(
+				highs[i]-lows[i],
+				math.Max(math.Abs(highs[i]-closes[i-1]), math.Abs(lows[i]-closes[i-1])),
+			)
+			trueRange[i] = maxRange
+		}
+	}
+	return trueRange, nil
+}
+
+// CalculateATR calculates the Average True Range (ATR) for a given window size.
+func CalculateATR(trueRange []float64, window int) ([]float64, error) {
+	if window <= 0 || len(trueRange) < window {
+		return nil, fmt.Errorf("invalid window size or insufficient data")
+	}
+
+	atr := make([]float64, len(trueRange))
+	for i := 0; i < len(trueRange); i++ {
+		if i < window-1 {
+			atr[i] = 0 // Not enough data for the window
+			continue
+		}
+
+		sum := 0.0
+		for j := 0; j < window; j++ {
+			sum += trueRange[i-j]
+		}
+		atr[i] = sum / float64(window)
+	}
+	return atr, nil
+}
+
 func main() {
 	// Open the CSV file
 	file, err := os.Open("RawData/8113.csv")
@@ -129,10 +197,12 @@ func main() {
 		return rows[i][0] < rows[j][0] // 日付が昇順になるよう比較
 	})
 
-	// Extract Closing prices
-	var closingPrices []float64
+	// Extract Closing High Low prices
+	var closingPrices, highPrices, lowPrices []float64
 	var originalMovingAve5, originalMovingAve14, originalMovingAve30 []float64
 	var originalVolatility5, originalVolatility14, originalVolatility30 []float64
+	var originalHLVolatility5, originalHLVolatility14, originalHLVolatility30 []float64
+	var originalATR5, originalATR14, originalATR30 []float64
 	var originalMADRate5, originalMADRate14, originalMADRate30 []float64
 	var originalRSI5, originalRSI14, originalRSI30 []float64
 	for _, row := range rows {
@@ -141,6 +211,18 @@ func main() {
 			closingPrices = append(closingPrices, math.NaN())
 		} else {
 			closingPrices = append(closingPrices, price)
+		}
+		price, err = strconv.ParseFloat(row[2], 64) // Assuming "High" is the 3th column
+		if err != nil {
+			highPrices = append(highPrices, math.NaN())
+		} else {
+			highPrices = append(highPrices, price)
+		}
+		price, err = strconv.ParseFloat(row[3], 64) // Assuming "Low" is the 4th column
+		if err != nil {
+			lowPrices = append(lowPrices, math.NaN())
+		} else {
+			lowPrices = append(lowPrices, price)
 		}
 		// originalMovingAve
 		price, err = strconv.ParseFloat(row[6], 64)
@@ -180,39 +262,77 @@ func main() {
 		} else {
 			originalVolatility30 = append(originalVolatility30, price)
 		}
-		// MADRate
+		// HLvolatility
 		price, err = strconv.ParseFloat(row[12], 64)
+		if err != nil {
+			originalHLVolatility5 = append(originalHLVolatility5, math.NaN())
+		} else {
+			originalHLVolatility5 = append(originalHLVolatility5, price)
+		}
+		price, err = strconv.ParseFloat(row[13], 64)
+		if err != nil {
+			originalHLVolatility14 = append(originalHLVolatility14, math.NaN())
+		} else {
+			originalHLVolatility14 = append(originalHLVolatility14, price)
+		}
+		price, err = strconv.ParseFloat(row[14], 64)
+		if err != nil {
+			originalHLVolatility30 = append(originalHLVolatility30, math.NaN())
+		} else {
+			originalHLVolatility30 = append(originalHLVolatility30, price)
+		}
+		// ATR
+		price, err = strconv.ParseFloat(row[15], 64)
+		if err != nil {
+			originalATR5 = append(originalATR5, math.NaN())
+		} else {
+			originalATR5 = append(originalATR5, price)
+		}
+		price, err = strconv.ParseFloat(row[16], 64)
+		if err != nil {
+			originalATR14 = append(originalATR14, math.NaN())
+		} else {
+			originalATR14 = append(originalATR14, price)
+		}
+		price, err = strconv.ParseFloat(row[17], 64)
+		if err != nil {
+			originalATR30 = append(originalATR30, math.NaN())
+		} else {
+			originalATR30 = append(originalATR30, price)
+		}
+		// MADRate
+		price, err = strconv.ParseFloat(row[18], 64)
 		if err != nil {
 			originalMADRate5 = append(originalMADRate5, math.NaN())
 		} else {
 			originalMADRate5 = append(originalMADRate5, price)
 		}
-		price, err = strconv.ParseFloat(row[13], 64)
+		price, err = strconv.ParseFloat(row[19], 64)
 		if err != nil {
 			originalMADRate14 = append(originalMADRate14, math.NaN())
 		} else {
 			originalMADRate14 = append(originalMADRate14, price)
 		}
-		price, err = strconv.ParseFloat(row[14], 64)
+		price, err = strconv.ParseFloat(row[20], 64)
 		if err != nil {
 			originalMADRate30 = append(originalMADRate30, math.NaN())
 		} else {
 			originalMADRate30 = append(originalMADRate30, price)
 		}
 		// RSI
-		price, err = strconv.ParseFloat(row[15], 64)
+		price, err = strconv.ParseFloat(row[21], 64)
 		if err != nil {
 			originalRSI5 = append(originalRSI5, math.NaN())
 		} else {
 			originalRSI5 = append(originalRSI5, price)
 		}
-		price, err = strconv.ParseFloat(row[16], 64)
+		price, err = strconv.ParseFloat(row[22], 64)
 		if err != nil {
 			originalRSI14 = append(originalRSI14, math.NaN())
 		} else {
 			originalRSI14 = append(originalRSI14, price)
 		}
-		price, err = strconv.ParseFloat(row[17], 64)
+		price, err = strconv.ParseFloat(row[23], 64)
 		if err != nil {
 			originalRSI30 = append(originalRSI30, math.NaN())
 		} else {
@@ -234,6 +354,13 @@ func main() {
 	volatility5 := volatility(closingPrices, 5)
 	volatility14 := volatility(closingPrices, 14)
 	volatility30 := volatility(closingPrices, 30)
+	hlVolatility5, _ := CalculateHighLowVolatility(highPrices, lowPrices, 5)
+	hlVolatility14, _ := CalculateHighLowVolatility(highPrices, lowPrices, 14)
+	hlVolatility30, _ := CalculateHighLowVolatility(highPrices, lowPrices, 30)
+	trueRange, _ := CalculateTrueRange(highPrices, lowPrices, closingPrices)
+	atr5, _ := CalculateATR(trueRange, 5)
+	atr14, _ := CalculateATR(trueRange, 14)
+	atr30, _ := CalculateATR(trueRange, 30)
 	madRate5 := madRate(closingPrices, movingAve5)
 	madRate14 := madRate(closingPrices, movingAve14)
 	madRate30 := madRate(closingPrices, movingAve30)
@@ -248,6 +375,12 @@ func main() {
 	diffVolatility5 := make([]float64, len(volatility5))
 	diffVolatility14 := make([]float64, len(volatility14))
 	diffVolatility30 := make([]float64, len(volatility30))
+	diffHLVolatility5 := make([]float64, len(hlVolatility5))
+	diffHLVolatility14 := make([]float64, len(hlVolatility14))
+	diffHLVolatility30 := make([]float64, len(hlVolatility30))
+	diffATR5 := make([]float64, len(atr5))
+	diffATR14 := make([]float64, len(atr14))
+	diffATR30 := make([]float64, len(atr30))
 	diffMADRate5 := make([]float64, len(madRate5))
 	diffMADRate14 := make([]float64, len(madRate14))
 	diffMADRate30 := make([]float64, len(madRate30))
@@ -298,6 +431,50 @@ func main() {
 			diffVolatility30[i] = volatility30[i] - originalVolatility30[i]
 		}
 	}
+	// hlVolatility
+	for i := range hlVolatility5 {
+		if math.IsNaN(hlVolatility5[i]) || math.IsNaN(originalHLVolatility5[i]) {
+			diffHLVolatility5[i] = math.NaN()
+		} else {
+			diffHLVolatility5[i] = hlVolatility5[i] - originalHLVolatility5[i]
+		}
+	}
+	for i := range hlVolatility14 {
+		if math.IsNaN(hlVolatility14[i]) || math.IsNaN(originalHLVolatility14[i]) {
+			diffHLVolatility14[i] = math.NaN()
+		} else {
+			diffHLVolatility14[i] = hlVolatility14[i] - originalHLVolatility14[i]
+		}
+	}
+	for i := range hlVolatility30 {
+		if math.IsNaN(hlVolatility30[i]) || math.IsNaN(originalHLVolatility30[i]) {
+			diffHLVolatility30[i] = math.NaN()
+		} else {
+			diffHLVolatility30[i] = hlVolatility30[i] - originalHLVolatility30[i]
+		}
+	}
+	// ATR
+	for i := range atr5 {
+		if math.IsNaN(atr5[i]) || math.IsNaN(originalATR5[i]) {
+			diffATR5[i] = math.NaN()
+		} else {
+			diffATR5[i] = atr5[i] - originalATR5[i]
+		}
+	}
+	for i := range atr14 {
+		if math.IsNaN(atr14[i]) || math.IsNaN(originalATR14[i]) {
+			diffATR14[i] = math.NaN()
+		} else {
+			diffATR14[i] = atr14[i] - originalATR14[i]
+		}
+	}
+	for i := range atr30 {
+		if math.IsNaN(atr30[i]) || math.IsNaN(originalATR30[i]) {
+			diffATR30[i] = math.NaN()
+		} else {
+			diffATR30[i] = atr30[i] - originalATR30[i]
+		}
+	}
 	// MADRate
 	for i := range madRate5 {
 		if math.IsNaN(madRate5[i]) || math.IsNaN(originalMADRate5[i]) {
@@ -345,6 +522,8 @@ func main() {
 
 	diffHeaders := []string{"Diff_MovingAve5", "Diff_MovingAve14", "Diff_MovingAve30",
 		"Diff_Volatility5", "Diff_Volatility14", "Diff_Volatility30",
+		"Diff_HLVolatility5", "Diff_HLVolatility14", "Diff_HLVolatility30",
+		"Diff_ATR5", "Diff_ATR14", "Diff_ATR30",
 		"Diff_MADRate5", "Diff_MADRate14", "Diff_MADRate30",
 		"Diff_RSI5", "Diff_RSI14", "Diff_RSI30"}
 
@@ -361,6 +540,8 @@ func main() {
 	// Write header
 	newHeader := append(header, "Recalc_MovingAve5", "Recalc_MovingAve14", "Recalc_MovingAve30",
 		"Recalc_Volatility5", "Recalc_Volatility14", "Recalc_Volatility30",
+		"Recalc_HLVolatility5", "Recalc_HLVolatility14", "Recalc_HLVolatility30",
+		"Recalc_ATR5", "Recalc_ATR14", "Recalc_ATR30",
 		"Recalc_MADRate5", "Recalc_MADRate14", "Recalc_MADRate30",
 		"Recalc_RSI5", "Recalc_RSI14", "Recalc_RSI30")
 	newHeader = append(newHeader, diffHeaders...)
@@ -375,6 +556,12 @@ func main() {
 			fmt.Sprintf("%.2f", volatility5[i]),
 			fmt.Sprintf("%.2f", volatility14[i]),
 			fmt.Sprintf("%.2f", volatility30[i]),
+			fmt.Sprintf("%.2f", hlVolatility5[i]),
+			fmt.Sprintf("%.2f", hlVolatility14[i]),
+			fmt.Sprintf("%.2f", hlVolatility30[i]),
+			fmt.Sprintf("%.2f", atr5[i]),
+			fmt.Sprintf("%.2f", atr14[i]),
+			fmt.Sprintf("%.2f", atr30[i]),
 			fmt.Sprintf("%.2f", madRate5[i]),
 			fmt.Sprintf("%.2f", madRate14[i]),
 			fmt.Sprintf("%.2f", madRate30[i]),
@@ -391,6 +578,14 @@ func main() {
 		newRow = append(newRow, fmt.Sprintf("%.2f", diffVolatility5[i]))
 		newRow = append(newRow, fmt.Sprintf("%.2f", diffVolatility14[i]))
 		newRow = append(newRow, fmt.Sprintf("%.2f", diffVolatility30[i]))
+		// HLvolatility
+		newRow = append(newRow, fmt.Sprintf("%.2f", diffHLVolatility5[i]))
+		newRow = append(newRow, fmt.Sprintf("%.2f", diffHLVolatility14[i]))
+		newRow = append(newRow, fmt.Sprintf("%.2f", diffHLVolatility30[i]))
+		// ATR
+		newRow = append(newRow, fmt.Sprintf("%.2f", diffATR5[i]))
+		newRow = append(newRow, fmt.Sprintf("%.2f", diffATR14[i]))
+		newRow = append(newRow, fmt.Sprintf("%.2f", diffATR30[i]))
 		// MADRate
 		newRow = append(newRow, fmt.Sprintf("%.2f", diffMADRate5[i]))
 		newRow = append(newRow, fmt.Sprintf("%.2f", diffMADRate14[i]))
