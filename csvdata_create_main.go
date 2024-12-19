@@ -17,7 +17,7 @@ import (
 )
 
 // ---- const
-const StockCode = "8113"
+const StockCode = "3231"
 const OutputDir = "RawData/"
 
 type TermEnum int
@@ -279,15 +279,15 @@ func checkOneStockBrand(url string) []StockBrandInformation {
 			}
 
 			getStr = strings.ReplaceAll(el.ChildText("td:nth-child(2)"), ",", "")
-			single.Opening = float64(convert.ExtractInt64(getStr))
+			single.Opening, _ = strconv.ParseFloat(getStr, 64)
 			getStr = strings.ReplaceAll(el.ChildText("td:nth-child(3)"), ",", "")
-			single.High = float64(convert.ExtractInt64(getStr))
+			single.High, _ = strconv.ParseFloat(getStr, 64)
 			getStr = strings.ReplaceAll(el.ChildText("td:nth-child(4)"), ",", "")
-			single.Low = float64(convert.ExtractInt64(getStr))
+			single.Low, _ = strconv.ParseFloat(getStr, 64)
 			getStr = strings.ReplaceAll(el.ChildText("td:nth-child(5)"), ",", "")
-			single.Closing = float64(convert.ExtractInt64(getStr))
+			single.Closing, _ = strconv.ParseFloat(getStr, 64)
 			getStr = strings.ReplaceAll(el.ChildText("td:nth-child(8)"), ",", "")
-			single.Volume = float64(convert.ExtractInt64(getStr))
+			single.Volume, _ = strconv.ParseFloat(getStr, 64)
 
 			retValue = append(retValue, single)
 		})
