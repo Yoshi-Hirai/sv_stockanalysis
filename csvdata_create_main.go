@@ -48,12 +48,16 @@ type StockBrandInformation struct {
 	UnderBBand        [TermNum]float64 `json:"underbband"`        // ボリンジャーバンド(下)
 	MADRate           [TermNum]float64 `json:"madrate"`           // 移動平均線乖離率
 	RSI               [TermNum]float64 `json:"rsi"`               // Relative Strength Index
-	ShortMACDVal      float64          `json:"smacdval"`          // MACD値(短期間)
-	ShortMACDSig      float64          `json:"smacdsig"`          // MACDシグナルライン(短期間)
-	ShortMACDHisto    float64          `json:"smacdhisto"`        // MACDヒストグラム(短期間)
-	LongMACDVal       float64          `json:"lmacdval"`          // MACD値(長期間)
-	LongMACDSig       float64          `json:"lmacdsig"`          // MACDシグナルライン(長期間)
-	LongMACDHisto     float64          `json:"lmacdhisto"`        // MACDヒストグラム(長期間)
+	ShortMacdVal      float64          `json:"shortmacdval"`      // MACD値(短期間)
+	ShortMacdSmaSig   float64          `json:"shortmacdsmasig"`   // SMA-MACDシグナルライン(短期間)
+	ShortMacdSmaHisto float64          `json:"shortmacdsmahisto"` // SMA-MACDヒストグラム(短期間)
+	ShortMacdEmaSig   float64          `json:"shortmacdemasig"`   // EMA-MACDシグナルライン(短期間)
+	ShortMacdEmaHisto float64          `json:"shortmacdemahisto"` // EMA-MACDヒストグラム(短期間)
+	LongMacdVal       float64          `json:"longmacdval"`       // MACD値(長期間)
+	LongMacdSmaSig    float64          `json:"longmacdsmasig"`    // SMA-MACDシグナルライン(長期間)
+	LongMacdSmaHisto  float64          `json:"longmacdsmahisto"`  // SMA-MACDヒストグラム(長期間)
+	LongMacdEmaSig    float64          `json:"longmacdemasig"`    // EMA-MACDシグナルライン(長期間)
+	LongMacdEmaHisto  float64          `json:"longmacdemahisto"`  // EMA-MACDヒストグラム(長期間)
 }
 
 // ---- Global Variable
@@ -75,6 +79,47 @@ func calcMovingAverage(data []float64) float64 {
 		sumPastData += c
 	}
 	return sumPastData / float64(dataLength)
+}
+
+// calculateEMA calculates the Exponential Moving Average (EMA : 指数移動平均) for a given data series
+func calculateEMA(data []float64, window int) []float64 {
+	if len(data) < window {
+		return nil // Not enough data to calculate EMA
+	}
+
+	alpha := 2.0 / float64(window+1) // Smoothing factor
+	ema := make([]float64, len(data))
+
+	// 有効なデータがある一番古い箇所を検索
+	var startIdx int
+	for startIdx = len(data) - 1; startIdx >= 0; startIdx-- {
+		if !math.IsNaN(data[startIdx]) {
+			break
+		}
+	}
+	if startIdx < window {
+		return nil // Not enough data to calculate EMA
+	}
+
+	// Initialize the first EMA value as the average of the first 'window' data points
+	sum := 0.0
+	for i := startIdx - 1; i > startIdx-1-window; i-- {
+		sum += data[i]
+
+	}
+	ema[startIdx-window] = sum / float64(window)
+
+	// Calculate EMA for the rest of the data
+	for i := startIdx - 1 - window; i >= 0; i-- {
+		ema[i] = (data[i] * alpha) + (ema[i+1] * (1 - alpha))
+	}
+
+	// Set EMA values before the initial window to NaN (not enough data)
+	for i := startIdx - window + 1; i < len(data); i++ {
+		ema[i] = math.NaN()
+	}
+
+	return ema
 }
 
 // 標準偏差を計算する関数
@@ -162,20 +207,22 @@ func calcRSI(prices []float64, period int) ([]float64, error) {
 }
 
 // MACD(Moving Average Convergence Divergence)を計算する関数
-func calcMACD(shortEma []float64, longEma []float64) ([]float64, []float64, []float64, error) {
+func calcMACD(shortEma []float64, longEma []float64) ([]float64, []float64, []float64, []float64, []float64, error) {
 
 	if len(shortEma) != len(longEma) {
-		return nil, nil, nil, fmt.Errorf("not enough data to calculate MACD")
+		return nil, nil, nil, nil, nil, fmt.Errorf("not enough data to calculate MACD")
 	}
 
 	macdValue := make([]float64, len(shortEma))
 	macdSignal := make([]float64, len(shortEma))
 	macdHisto := make([]float64, len(shortEma))
+	macdEmaSignal := make([]float64, len(shortEma))
+	macdEmaHisto := make([]float64, len(shortEma))
 	for i := 0; i < len(shortEma); i++ {
 		macdValue[i] = shortEma[i] - longEma[i]
 	}
 
-	// シグナルラインの計算を行う
+	// シグナルラインの計算を行う(SMA)
 	window := 9
 	for i := 0; i < len(macdValue); i++ {
 
@@ -198,7 +245,17 @@ func calcMACD(shortEma []float64, longEma []float64) ([]float64, []float64, []fl
 		}
 	}
 
-	return macdValue, macdSignal, macdHisto, nil
+	// シグナルラインの計算を行う(EMA)
+	macdEmaSignal = calculateEMA(macdValue, window)
+	for i := 0; i < len(macdValue); i++ {
+		if macdEmaSignal[i] == math.NaN() {
+			macdEmaHisto[i] = math.NaN()
+		} else {
+			macdEmaHisto[i] = macdValue[i] - macdEmaSignal[i]
+		}
+
+	}
+	return macdValue, macdSignal, macdHisto, macdEmaSignal, macdEmaHisto, nil
 }
 
 // 1銘柄のurlを引数として、該当した銘柄の情報を返す
@@ -412,18 +469,22 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 
 	// MACDの計算
 	// 5日移動平均と30日移動平均のMACD
-	tmpMACDVal, tmpMACDSignal, tmpMACDHisto, _ := calcMACD(movingAveValue[Term5], movingAveValue[Term30])
+	tmpMACDVal, tmpMACDSignal, tmpMACDHisto, tmpMACDEMASignal, tmpMACDEMAHisto, _ := calcMACD(movingAveValue[Term5], movingAveValue[Term30])
 	for i := 0; i < dataLen; i++ {
-		stockData[i].ShortMACDVal = tmpMACDVal[i]
-		stockData[i].ShortMACDSig = tmpMACDSignal[i]
-		stockData[i].ShortMACDHisto = tmpMACDHisto[i]
+		stockData[i].ShortMacdVal = tmpMACDVal[i]
+		stockData[i].ShortMacdSmaSig = tmpMACDSignal[i]
+		stockData[i].ShortMacdSmaHisto = tmpMACDHisto[i]
+		stockData[i].ShortMacdEmaSig = tmpMACDEMASignal[i]
+		stockData[i].ShortMacdEmaHisto = tmpMACDEMAHisto[i]
 	}
 	// 14日移動平均と30日移動平均のMACD
-	tmpMACDVal, tmpMACDSignal, tmpMACDHisto, _ = calcMACD(movingAveValue[Term14], movingAveValue[Term30])
+	tmpMACDVal, tmpMACDSignal, tmpMACDHisto, tmpMACDEMASignal, tmpMACDEMAHisto, _ = calcMACD(movingAveValue[Term14], movingAveValue[Term30])
 	for i := 0; i < dataLen; i++ {
-		stockData[i].LongMACDVal = tmpMACDVal[i]
-		stockData[i].LongMACDSig = tmpMACDSignal[i]
-		stockData[i].LongMACDHisto = tmpMACDHisto[i]
+		stockData[i].LongMacdVal = tmpMACDVal[i]
+		stockData[i].LongMacdSmaSig = tmpMACDSignal[i]
+		stockData[i].LongMacdSmaHisto = tmpMACDHisto[i]
+		stockData[i].LongMacdEmaSig = tmpMACDEMASignal[i]
+		stockData[i].LongMacdEmaHisto = tmpMACDEMAHisto[i]
 	}
 
 	return stockData
@@ -448,7 +509,7 @@ func csvCreationOneStockBrand(code string) {
 	var lineStr []string = []string{"date", "Opening", "High", "Low", "Closing", "Volume", "MovingAve5", "MovingAve14", "MovingAve30",
 		"Volatility5", "Volatility14", "Volatility30", "HighLowVolatility5", "HighLowVolatility14", "HighLowVolatility30", "ATR5", "ATR14", "ATR30",
 		"MADRate5", "MADRate14", "MADRate30", "RSI5", "RSI14", "RSI30",
-		"shortMACDSMA", "shortMACDSignalSMA", "shortMACDHistoSMA", "longMACDSMA", "longMACDSignalSMA", "longMACDHistoSMA",
+		"shortMACD", "shortMACDSignalSMA", "shortMACDHistoSMA", "shortMACDSignalEMA", "shortMACDHistoEMA", "longMACD", "longMACDSignalSMA", "longMACDHistoSMA", "longMACDSignalEMA", "longMACDHistoEMA",
 		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30"}
 	outputStr = append(outputStr, lineStr)
 	for _, c := range synthesisStockData {
@@ -484,8 +545,10 @@ func csvCreationOneStockBrand(code string) {
 			strconv.FormatFloat(c.ATR[Term5], 'f', 2, 64), strconv.FormatFloat(c.ATR[Term14], 'f', 2, 64), strconv.FormatFloat(c.ATR[Term30], 'f', 2, 64),
 			strconv.FormatFloat(c.MADRate[Term5], 'f', 2, 64), strconv.FormatFloat(c.MADRate[Term14], 'f', 2, 64), strconv.FormatFloat(c.MADRate[Term30], 'f', 2, 64),
 			strconv.FormatFloat(c.RSI[Term5], 'f', 2, 64), strconv.FormatFloat(c.RSI[Term14], 'f', 2, 64), strconv.FormatFloat(c.RSI[Term30], 'f', 2, 64),
-			strconv.FormatFloat(c.ShortMACDVal, 'f', 2, 64), strconv.FormatFloat(c.ShortMACDSig, 'f', 2, 64), strconv.FormatFloat(c.ShortMACDHisto, 'f', 2, 64),
-			strconv.FormatFloat(c.LongMACDVal, 'f', 2, 64), strconv.FormatFloat(c.LongMACDSig, 'f', 2, 64), strconv.FormatFloat(c.LongMACDHisto, 'f', 2, 64),
+			strconv.FormatFloat(c.ShortMacdVal, 'f', 2, 64), strconv.FormatFloat(c.ShortMacdSmaSig, 'f', 2, 64), strconv.FormatFloat(c.ShortMacdSmaHisto, 'f', 2, 64),
+			strconv.FormatFloat(c.ShortMacdEmaSig, 'f', 2, 64), strconv.FormatFloat(c.ShortMacdEmaHisto, 'f', 2, 64),
+			strconv.FormatFloat(c.LongMacdVal, 'f', 2, 64), strconv.FormatFloat(c.LongMacdSmaSig, 'f', 2, 64), strconv.FormatFloat(c.LongMacdSmaHisto, 'f', 2, 64),
+			strconv.FormatFloat(c.LongMacdEmaSig, 'f', 2, 64), strconv.FormatFloat(c.LongMacdEmaHisto, 'f', 2, 64),
 			strconv.FormatFloat(c.UpperBBand[Term5], 'f', 2, 64), strconv.FormatFloat(c.UpperBBand[Term14], 'f', 2, 64), strconv.FormatFloat(c.UpperBBand[Term30], 'f', 2, 64),
 			strconv.FormatFloat(c.UnderBBand[Term5], 'f', 2, 64), strconv.FormatFloat(c.UnderBBand[Term14], 'f', 2, 64), strconv.FormatFloat(c.UnderBBand[Term30], 'f', 2, 64),
 		)
