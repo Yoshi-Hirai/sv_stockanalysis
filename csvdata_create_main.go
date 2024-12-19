@@ -17,8 +17,15 @@ import (
 )
 
 // ---- const
-const StockCode = "3231"
+const StockCode = "8113"
 const OutputDir = "RawData/"
+
+type ObtainType int
+
+const (
+	Stock ObtainType = iota // 株価の取得
+	Forex                   // 為替の取得
+)
 
 type TermEnum int
 
@@ -359,6 +366,11 @@ func readCSVInsertData(csvName string) ([]StockBrandInformation, bool) {
 		sort.Slice(retData, func(i, j int) bool {
 			return retData[i].ParseDate.After(retData[j].ParseDate)
 		})
+
+		// 読み込んだCSVを1バージョン前のモノとしてcsvに出力する
+		csvNameSlice := strings.Split(csvName, ".")
+		csvNameSlice[0] = csvNameSlice[0] + "_bef.csv"
+		_ = fileio.FileIoCsvWrite(csvNameSlice[0], fileContents, false)
 	}
 	return retData, retInitialFlag
 }
@@ -368,7 +380,8 @@ func getWebIntegrateData(code string, isInitialCreate bool, csvData []StockBrand
 
 	// スクレイピング
 	const maxPage = 10
-	// URL https://kabutan.jp/stock/kabuka?code=147A&ashi=day&page=1
+	// Obtain = Stock URL https://kabutan.jp/stock/kabuka?code=147A&ashi=day&page=1
+	// Obtain = Forex URL https://kabutan.jp/stock/kabuka?code=0970&ashi=day&page=4
 	baseUrl := "https://kabutan.jp/stock/kabuka?code="
 	subUrl := "&ashi=day&page="
 	for i := 1; i <= maxPage; i++ {
@@ -518,39 +531,20 @@ func csvCreationOneStockBrand(code string) {
 		dateSlice := strings.Split(dateStr, " ")
 		dateSlice[0] = strings.ReplaceAll(dateSlice[0], "-", "/")
 
-		movingAveString := []string{"-", "-", "-"}
-		volatilityString := []string{"-", "-", "-"}
-		madRateString := []string{"-", "-", "-"}
-		rsiString := []string{"-", "-", "-"}
-
-		for i := Term5; i < TermNum; i++ {
-			if c.MovingAve[i] != 0 {
-				movingAveString[i] = strconv.FormatFloat(c.MovingAve[i], 'f', 2, 64)
-			}
-			if c.Volatility[i] != 0 {
-				volatilityString[i] = strconv.FormatFloat(c.Volatility[i], 'f', 2, 64)
-			}
-			if c.MADRate[i] != 0 {
-				madRateString[i] = strconv.FormatFloat(c.MADRate[i], 'f', 2, 64)
-			}
-			if c.RSI[i] != 0 {
-				rsiString[i] = strconv.FormatFloat(c.RSI[i], 'f', 2, 64)
-			}
-		}
-		lineStr = append(lineStr, dateSlice[0], strconv.FormatFloat(c.Opening, 'f', 2, 64), strconv.FormatFloat(c.High, 'f', 2, 64), strconv.FormatFloat(c.Low, 'f', 2, 64),
-			strconv.FormatFloat(c.Closing, 'f', 2, 64), strconv.FormatFloat(c.Volume, 'f', 2, 64),
-			strconv.FormatFloat(c.MovingAve[Term5], 'f', 2, 64), strconv.FormatFloat(c.MovingAve[Term14], 'f', 2, 64), strconv.FormatFloat(c.MovingAve[Term30], 'f', 2, 64),
-			strconv.FormatFloat(c.Volatility[Term5], 'f', 2, 64), strconv.FormatFloat(c.Volatility[Term14], 'f', 2, 64), strconv.FormatFloat(c.Volatility[Term30], 'f', 2, 64),
-			strconv.FormatFloat(c.HighLowVolatility[Term5], 'f', 2, 64), strconv.FormatFloat(c.HighLowVolatility[Term14], 'f', 2, 64), strconv.FormatFloat(c.HighLowVolatility[Term30], 'f', 2, 64),
-			strconv.FormatFloat(c.ATR[Term5], 'f', 2, 64), strconv.FormatFloat(c.ATR[Term14], 'f', 2, 64), strconv.FormatFloat(c.ATR[Term30], 'f', 2, 64),
-			strconv.FormatFloat(c.MADRate[Term5], 'f', 2, 64), strconv.FormatFloat(c.MADRate[Term14], 'f', 2, 64), strconv.FormatFloat(c.MADRate[Term30], 'f', 2, 64),
-			strconv.FormatFloat(c.RSI[Term5], 'f', 2, 64), strconv.FormatFloat(c.RSI[Term14], 'f', 2, 64), strconv.FormatFloat(c.RSI[Term30], 'f', 2, 64),
-			strconv.FormatFloat(c.ShortMacdVal, 'f', 2, 64), strconv.FormatFloat(c.ShortMacdSmaSig, 'f', 2, 64), strconv.FormatFloat(c.ShortMacdSmaHisto, 'f', 2, 64),
-			strconv.FormatFloat(c.ShortMacdEmaSig, 'f', 2, 64), strconv.FormatFloat(c.ShortMacdEmaHisto, 'f', 2, 64),
-			strconv.FormatFloat(c.LongMacdVal, 'f', 2, 64), strconv.FormatFloat(c.LongMacdSmaSig, 'f', 2, 64), strconv.FormatFloat(c.LongMacdSmaHisto, 'f', 2, 64),
-			strconv.FormatFloat(c.LongMacdEmaSig, 'f', 2, 64), strconv.FormatFloat(c.LongMacdEmaHisto, 'f', 2, 64),
-			strconv.FormatFloat(c.UpperBBand[Term5], 'f', 2, 64), strconv.FormatFloat(c.UpperBBand[Term14], 'f', 2, 64), strconv.FormatFloat(c.UpperBBand[Term30], 'f', 2, 64),
-			strconv.FormatFloat(c.UnderBBand[Term5], 'f', 2, 64), strconv.FormatFloat(c.UnderBBand[Term14], 'f', 2, 64), strconv.FormatFloat(c.UnderBBand[Term30], 'f', 2, 64),
+		lineStr = append(lineStr, dateSlice[0], strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64),
+			strconv.FormatFloat(c.Closing, 'f', 5, 64), strconv.FormatFloat(c.Volume, 'f', 5, 64),
+			strconv.FormatFloat(c.MovingAve[Term5], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term14], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term30], 'f', 5, 64),
+			strconv.FormatFloat(c.Volatility[Term5], 'f', 5, 64), strconv.FormatFloat(c.Volatility[Term14], 'f', 5, 64), strconv.FormatFloat(c.Volatility[Term30], 'f', 5, 64),
+			strconv.FormatFloat(c.HighLowVolatility[Term5], 'f', 5, 64), strconv.FormatFloat(c.HighLowVolatility[Term14], 'f', 5, 64), strconv.FormatFloat(c.HighLowVolatility[Term30], 'f', 5, 64),
+			strconv.FormatFloat(c.ATR[Term5], 'f', 5, 64), strconv.FormatFloat(c.ATR[Term14], 'f', 5, 64), strconv.FormatFloat(c.ATR[Term30], 'f', 5, 64),
+			strconv.FormatFloat(c.MADRate[Term5], 'f', 5, 64), strconv.FormatFloat(c.MADRate[Term14], 'f', 5, 64), strconv.FormatFloat(c.MADRate[Term30], 'f', 5, 64),
+			strconv.FormatFloat(c.RSI[Term5], 'f', 5, 64), strconv.FormatFloat(c.RSI[Term14], 'f', 5, 64), strconv.FormatFloat(c.RSI[Term30], 'f', 5, 64),
+			strconv.FormatFloat(c.ShortMacdVal, 'f', 5, 64), strconv.FormatFloat(c.ShortMacdSmaSig, 'f', 5, 64), strconv.FormatFloat(c.ShortMacdSmaHisto, 'f', 5, 64),
+			strconv.FormatFloat(c.ShortMacdEmaSig, 'f', 5, 64), strconv.FormatFloat(c.ShortMacdEmaHisto, 'f', 5, 64),
+			strconv.FormatFloat(c.LongMacdVal, 'f', 5, 64), strconv.FormatFloat(c.LongMacdSmaSig, 'f', 5, 64), strconv.FormatFloat(c.LongMacdSmaHisto, 'f', 5, 64),
+			strconv.FormatFloat(c.LongMacdEmaSig, 'f', 5, 64), strconv.FormatFloat(c.LongMacdEmaHisto, 'f', 5, 64),
+			strconv.FormatFloat(c.UpperBBand[Term5], 'f', 5, 64), strconv.FormatFloat(c.UpperBBand[Term14], 'f', 5, 64), strconv.FormatFloat(c.UpperBBand[Term30], 'f', 5, 64),
+			strconv.FormatFloat(c.UnderBBand[Term5], 'f', 5, 64), strconv.FormatFloat(c.UnderBBand[Term14], 'f', 5, 64), strconv.FormatFloat(c.UnderBBand[Term30], 'f', 5, 64),
 		)
 		outputStr = append(outputStr, lineStr)
 	}
