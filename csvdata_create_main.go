@@ -17,8 +17,9 @@ import (
 )
 
 // ---- const
-const StockCode = "8113"
-const OutputDir = "RawData/"
+const StockCode = "0970"
+const ModelOutputDir = "ModelData/"
+const RawOutputDir = "RawData/"
 
 type ObtainType int
 
@@ -70,6 +71,12 @@ type StockBrandInformation struct {
 // ---- Global Variable
 
 // ---- Package Global Variable
+
+var termDay = []int{
+	5,  // Term5
+	14, // Term14
+	30, // Term30
+}
 
 // ---- public function ----
 
@@ -412,11 +419,6 @@ func getWebIntegrateData(code string, isInitialCreate bool, csvData []StockBrand
 // 取得した該当データに対する移動平均、ボラティリティ(標準偏差)などのテクニカル指標を計算する
 func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInformation {
 
-	termDay := []int{
-		5,
-		14,
-		30,
-	}
 	dataLen := len(stockData)
 	var closingPrices []float64
 	for _, c := range stockData {
@@ -506,9 +508,11 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 // 該当銘柄のcsvデータを作成する
 func csvCreationOneStockBrand(code string) {
 
-	// csvファイルを読み込んでStockBrandInformationに展開
-	csvFileName := fmt.Sprintf("%s%s.csv", OutputDir, code)
-	synthesisStockData, isInitialCreation := readCSVInsertData(csvFileName)
+	// RawDataのcsvファイルを読み込んでStockBrandInformationに展開
+	// モデル用にテクニカル指標を付加したファイルをModelDataに出力
+	rawCsvFileName := fmt.Sprintf("%s%s.csv", RawOutputDir, code)
+	modelCsvFileName := fmt.Sprintf("%s%s.csv", ModelOutputDir, code)
+	synthesisStockData, isInitialCreation := readCSVInsertData(rawCsvFileName)
 	slog.Info("File Component", "len", len(synthesisStockData))
 
 	// スクレイピングし、csvファイルから読みこんだデータとマージしたStockBrandInformationを作成
@@ -525,7 +529,12 @@ func csvCreationOneStockBrand(code string) {
 		"shortMACD", "shortMACDSignalSMA", "shortMACDHistoSMA", "shortMACDSignalEMA", "shortMACDHistoEMA", "longMACD", "longMACDSignalSMA", "longMACDHistoSMA", "longMACDSignalEMA", "longMACDHistoEMA",
 		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30"}
 	outputStr = append(outputStr, lineStr)
-	for _, c := range synthesisStockData {
+	for i, c := range synthesisStockData {
+
+		if i >= len(synthesisStockData)-termDay[Term30] {
+			break
+		}
+
 		lineStr = nil
 		dateStr := c.ParseDate.Format(time.DateTime)
 		dateSlice := strings.Split(dateStr, " ")
@@ -548,9 +557,25 @@ func csvCreationOneStockBrand(code string) {
 		)
 		outputStr = append(outputStr, lineStr)
 	}
+	_ = fileio.FileIoCsvWrite(modelCsvFileName, outputStr, false)
+	slog.Info("Final Component", "Data", len(synthesisStockData), "output", len(outputStr))
 
-	_ = fileio.FileIoCsvWrite(csvFileName, outputStr, false)
-	slog.Info("Final Component", "len", len(synthesisStockData))
+	// 基本データをRawDataディレクトリに出力
+	var rawLineStr []string = []string{"date", "Opening", "High", "Low", "Closing", "Volume"}
+	outputStr = nil
+	outputStr = append(outputStr, rawLineStr)
+	for _, c := range synthesisStockData {
+		lineStr = nil
+		dateStr := c.ParseDate.Format(time.DateTime)
+		dateSlice := strings.Split(dateStr, " ")
+		dateSlice[0] = strings.ReplaceAll(dateSlice[0], "-", "/")
+
+		lineStr = append(lineStr, dateSlice[0], strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64),
+			strconv.FormatFloat(c.Closing, 'f', 5, 64), strconv.FormatFloat(c.Volume, 'f', 5, 64),
+		)
+		outputStr = append(outputStr, lineStr)
+	}
+	_ = fileio.FileIoCsvWrite(rawCsvFileName, outputStr, false)
 
 }
 
