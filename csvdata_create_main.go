@@ -531,6 +531,8 @@ func csvCreationOneStockBrand(code string) {
 	outputStr = append(outputStr, lineStr)
 	for i, c := range synthesisStockData {
 
+		// Nanが発生してしまうデータを出力しない
+		// 30日間移動平均でデータ数が30未満だとNaNが発生してしまう
 		if i >= len(synthesisStockData)-termDay[Term30] {
 			break
 		}
