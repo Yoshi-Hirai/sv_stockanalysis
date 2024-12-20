@@ -17,7 +17,7 @@ import (
 )
 
 // ---- const
-const StockCode = "0970"
+const StockCode = "7779"
 const ModelOutputDir = "ModelData/"
 const RawOutputDir = "RawData/"
 
@@ -77,6 +77,8 @@ var termDay = []int{
 	14, // Term14
 	30, // Term30
 }
+
+var nowObtain = Stock
 
 // ---- public function ----
 
@@ -523,11 +525,17 @@ func csvCreationOneStockBrand(code string) {
 
 	// CSVに出力するように文字列に変換。日付フォーマットを time.DateTime から　yyyy/mm/dd へ変更する。
 	var outputStr [][]string
-	var lineStr []string = []string{"date", "Opening", "High", "Low", "Closing", "Volume", "MovingAve5", "MovingAve14", "MovingAve30",
-		"Volatility5", "Volatility14", "Volatility30", "HighLowVolatility5", "HighLowVolatility14", "HighLowVolatility30", "ATR5", "ATR14", "ATR30",
-		"MADRate5", "MADRate14", "MADRate30", "RSI5", "RSI14", "RSI30",
+	var lineStr []string = []string{"date", "Opening", "High", "Low", "Closing"}
+	var lineSubStr []string = []string{"MovingAve5", "MovingAve14", "MovingAve30", "Volatility5", "Volatility14", "Volatility30",
+		"HighLowVolatility5", "HighLowVolatility14", "HighLowVolatility30",
+		"ATR5", "ATR14", "ATR30", "MADRate5", "MADRate14", "MADRate30", "RSI5", "RSI14", "RSI30",
 		"shortMACD", "shortMACDSignalSMA", "shortMACDHistoSMA", "shortMACDSignalEMA", "shortMACDHistoEMA", "longMACD", "longMACDSignalSMA", "longMACDHistoSMA", "longMACDSignalEMA", "longMACDHistoEMA",
 		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30"}
+	if nowObtain != Forex {
+		lineStr = append(lineStr, "Volume")
+	}
+	lineStr = append(lineStr, lineSubStr...)
+	//		var nowObtain = Forex
 	outputStr = append(outputStr, lineStr)
 	for i, c := range synthesisStockData {
 
@@ -542,9 +550,11 @@ func csvCreationOneStockBrand(code string) {
 		dateSlice := strings.Split(dateStr, " ")
 		dateSlice[0] = strings.ReplaceAll(dateSlice[0], "-", "/")
 
-		lineStr = append(lineStr, dateSlice[0], strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64),
-			strconv.FormatFloat(c.Closing, 'f', 5, 64), strconv.FormatFloat(c.Volume, 'f', 5, 64),
-			strconv.FormatFloat(c.MovingAve[Term5], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term14], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term30], 'f', 5, 64),
+		lineStr = append(lineStr, dateSlice[0], strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64), strconv.FormatFloat(c.Closing, 'f', 5, 64))
+		if nowObtain != Forex {
+			lineStr = append(lineStr, strconv.FormatFloat(c.Volume, 'f', 5, 64))
+		}
+		lineStr = append(lineStr, strconv.FormatFloat(c.MovingAve[Term5], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term14], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term30], 'f', 5, 64),
 			strconv.FormatFloat(c.Volatility[Term5], 'f', 5, 64), strconv.FormatFloat(c.Volatility[Term14], 'f', 5, 64), strconv.FormatFloat(c.Volatility[Term30], 'f', 5, 64),
 			strconv.FormatFloat(c.HighLowVolatility[Term5], 'f', 5, 64), strconv.FormatFloat(c.HighLowVolatility[Term14], 'f', 5, 64), strconv.FormatFloat(c.HighLowVolatility[Term30], 'f', 5, 64),
 			strconv.FormatFloat(c.ATR[Term5], 'f', 5, 64), strconv.FormatFloat(c.ATR[Term14], 'f', 5, 64), strconv.FormatFloat(c.ATR[Term30], 'f', 5, 64),
