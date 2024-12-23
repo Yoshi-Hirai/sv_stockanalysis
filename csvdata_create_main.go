@@ -17,9 +17,10 @@ import (
 )
 
 // ---- const
-const StockCode = "7779"
-const ModelOutputDir = "ModelData/"
-const RawOutputDir = "RawData/"
+const StockCode = "2181"
+const ResourceDir = "Resource/"
+const RawDataFileName = "RawData.csv"
+const ModelDataFileName = "ModelData.csv"
 
 type ObtainType int
 
@@ -512,8 +513,8 @@ func csvCreationOneStockBrand(code string) {
 
 	// RawDataのcsvファイルを読み込んでStockBrandInformationに展開
 	// モデル用にテクニカル指標を付加したファイルをModelDataに出力
-	rawCsvFileName := fmt.Sprintf("%s%s.csv", RawOutputDir, code)
-	modelCsvFileName := fmt.Sprintf("%s%s.csv", ModelOutputDir, code)
+	rawCsvFileName := fmt.Sprintf("%s%s/%s", ResourceDir, code, RawDataFileName)
+	modelCsvFileName := fmt.Sprintf("%s%s/%s", ResourceDir, code, ModelDataFileName)
 	synthesisStockData, isInitialCreation := readCSVInsertData(rawCsvFileName)
 	slog.Info("File Component", "len", len(synthesisStockData))
 
