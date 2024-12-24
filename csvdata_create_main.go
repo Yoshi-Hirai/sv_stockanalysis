@@ -17,7 +17,7 @@ import (
 )
 
 // ---- const
-const StockCode = "2181"
+const StockCode = "0970"
 const ResourceDir = "Resource/"
 const RawDataFileName = "RawData.csv"
 const ModelDataFileName = "ModelData.csv"
@@ -40,6 +40,14 @@ const (
 )
 
 // ---- struct
+
+// 共通情報構造体
+type CommonInformation struct {
+	ParseDate     time.Time `json:"parsedate"`     //	日付
+	InterestRJpn  float64   `json:"interestrjpn"`  //	金利日本
+	InterestRUsa  float64   `json:"interestrusa"`  //	金利アメリカ
+	InterestREuro float64   `json:"interestreuro"` //	金利ユーロ
+}
 
 // 銘柄情報構造体
 type StockBrandInformation struct {
@@ -79,11 +87,53 @@ var termDay = []int{
 	30, // Term30
 }
 
-var nowObtain = Stock
+var nowObtain = Forex
 
 // ---- public function ----
 
 // ---- private function
+
+// 共通データのCSVを読み込む
+func readCommonCsv() []CommonInformation {
+
+	var retData []CommonInformation
+
+	fileContents, err := fileio.FileIoCsvRead("Resource/CommonData.csv")
+	if err != nil {
+		slog.Info("FileReadError", "err", err)
+	} else {
+
+		for i, v := range fileContents {
+			// 先頭はタイトル行なのでSkip
+			if i == 0 {
+				continue
+			}
+
+			var single CommonInformation
+			single.ParseDate, err = convert.ConvertStringToTime(v[0])
+			if err != nil {
+				slog.Info("err", "err", err)
+			}
+			single.InterestRJpn, _ = strconv.ParseFloat(v[1], 64)
+			single.InterestRUsa, _ = strconv.ParseFloat(v[2], 64)
+			single.InterestREuro, _ = strconv.ParseFloat(v[3], 64)
+			retData = append(retData, single)
+		}
+	}
+	return retData
+}
+
+// 適正な共通データを返す
+func getCommonInformation(cData []CommonInformation, date time.Time) CommonInformation {
+	for _, v := range cData {
+
+		if date.Year() == v.ParseDate.Year() && date.Month() == v.ParseDate.Month() {
+			return v
+		}
+	}
+	var ret CommonInformation
+	return ret
+}
 
 // 移動平均を計算する
 func calcMovingAverage(data []float64) float64 {
@@ -247,7 +297,7 @@ func calcMACD(shortEma []float64, longEma []float64) ([]float64, []float64, []fl
 		isOufOfTarget := false
 		for j := 0; j < window; j++ {
 			idx := i + j
-			if idx >= len(macdValue) || macdValue[idx] == math.NaN() {
+			if idx >= len(macdValue) || math.IsNaN(macdValue[idx]) {
 				isOufOfTarget = true
 				break
 			}
@@ -265,7 +315,7 @@ func calcMACD(shortEma []float64, longEma []float64) ([]float64, []float64, []fl
 	// シグナルラインの計算を行う(EMA)
 	macdEmaSignal = calculateEMA(macdValue, window)
 	for i := 0; i < len(macdValue); i++ {
-		if macdEmaSignal[i] == math.NaN() {
+		if math.IsNaN(macdEmaSignal[i]) {
 			macdEmaHisto[i] = math.NaN()
 		} else {
 			macdEmaHisto[i] = macdValue[i] - macdEmaSignal[i]
@@ -509,7 +559,7 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 }
 
 // 該当銘柄のcsvデータを作成する
-func csvCreationOneStockBrand(code string) {
+func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 
 	// RawDataのcsvファイルを読み込んでStockBrandInformationに展開
 	// モデル用にテクニカル指標を付加したファイルをModelDataに出力
@@ -526,7 +576,7 @@ func csvCreationOneStockBrand(code string) {
 
 	// CSVに出力するように文字列に変換。日付フォーマットを time.DateTime から　yyyy/mm/dd へ変更する。
 	var outputStr [][]string
-	var lineStr []string = []string{"date", "Opening", "High", "Low", "Closing"}
+	var lineStr []string = []string{"date", "DayOfWeek", "Opening", "High", "Low", "Closing"}
 	var lineSubStr []string = []string{"MovingAve5", "MovingAve14", "MovingAve30", "Volatility5", "Volatility14", "Volatility30",
 		"HighLowVolatility5", "HighLowVolatility14", "HighLowVolatility30",
 		"ATR5", "ATR14", "ATR30", "MADRate5", "MADRate14", "MADRate30", "RSI5", "RSI14", "RSI30",
@@ -534,6 +584,11 @@ func csvCreationOneStockBrand(code string) {
 		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30"}
 	if nowObtain != Forex {
 		lineStr = append(lineStr, "Volume")
+	} else {
+		if code == "0970" {
+			// ユーロドル
+			lineStr = append(lineStr, "InterestRate(USA)", "InterestRate(EURO)")
+		}
 	}
 	lineStr = append(lineStr, lineSubStr...)
 	//		var nowObtain = Forex
@@ -542,18 +597,25 @@ func csvCreationOneStockBrand(code string) {
 
 		// Nanが発生してしまうデータを出力しない
 		// 30日間移動平均でデータ数が30未満だとNaNが発生してしまう
+		// MACDシグナルを計算するために、さらに9日間のデータがないとNanが発生する
 		if i >= len(synthesisStockData)-termDay[Term30] {
 			break
 		}
 
 		lineStr = nil
+		commonInfo := getCommonInformation(cData, c.ParseDate)
 		dateStr := c.ParseDate.Format(time.DateTime)
 		dateSlice := strings.Split(dateStr, " ")
 		dateSlice[0] = strings.ReplaceAll(dateSlice[0], "-", "/")
 
-		lineStr = append(lineStr, dateSlice[0], strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64), strconv.FormatFloat(c.Closing, 'f', 5, 64))
+		lineStr = append(lineStr, dateSlice[0], c.ParseDate.Weekday().String(), strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64), strconv.FormatFloat(c.Closing, 'f', 5, 64))
 		if nowObtain != Forex {
 			lineStr = append(lineStr, strconv.FormatFloat(c.Volume, 'f', 5, 64))
+		} else {
+			if code == "0970" {
+				// ユーロドル
+				lineStr = append(lineStr, strconv.FormatFloat(commonInfo.InterestRUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.InterestREuro, 'f', 5, 64))
+			}
 		}
 		lineStr = append(lineStr, strconv.FormatFloat(c.MovingAve[Term5], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term14], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term30], 'f', 5, 64),
 			strconv.FormatFloat(c.Volatility[Term5], 'f', 5, 64), strconv.FormatFloat(c.Volatility[Term14], 'f', 5, 64), strconv.FormatFloat(c.Volatility[Term30], 'f', 5, 64),
@@ -595,5 +657,6 @@ func csvCreationOneStockBrand(code string) {
 // ---- main
 func main() {
 	//lambda.Start(checkJraEntries)
-	csvCreationOneStockBrand(StockCode)
+	commonData := readCommonCsv()
+	csvCreationOneStockBrand(StockCode, commonData)
 }
