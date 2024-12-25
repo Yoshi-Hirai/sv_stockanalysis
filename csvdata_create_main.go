@@ -43,10 +43,11 @@ const (
 
 // 共通情報構造体
 type CommonInformation struct {
-	ParseDate     time.Time `json:"parsedate"`     //	日付
-	InterestRJpn  float64   `json:"interestrjpn"`  //	金利日本
-	InterestRUsa  float64   `json:"interestrusa"`  //	金利アメリカ
-	InterestREuro float64   `json:"interestreuro"` //	金利ユーロ
+	ParseDate       time.Time `json:"parsedate"`       //	日付
+	InterestRJpn    float64   `json:"interestrjpn"`    //	金利日本
+	InterestRUsa    float64   `json:"interestrusa"`    //	金利アメリカ
+	InterestREuro   float64   `json:"interestreuro"`   //	金利ユーロ
+	UnemployRateJpn float64   `json:"unemployratejpn"` //　失業率日本
 }
 
 // 銘柄情報構造体
@@ -86,6 +87,7 @@ var termDay = []int{
 	14, // Term14
 	30, // Term30
 }
+var windowMacdSignal = 9
 
 var nowObtain = Forex
 
@@ -117,6 +119,7 @@ func readCommonCsv() []CommonInformation {
 			single.InterestRJpn, _ = strconv.ParseFloat(v[1], 64)
 			single.InterestRUsa, _ = strconv.ParseFloat(v[2], 64)
 			single.InterestREuro, _ = strconv.ParseFloat(v[3], 64)
+			single.UnemployRateJpn, _ = strconv.ParseFloat(v[4], 64)
 			retData = append(retData, single)
 		}
 	}
@@ -290,12 +293,11 @@ func calcMACD(shortEma []float64, longEma []float64) ([]float64, []float64, []fl
 	}
 
 	// シグナルラインの計算を行う(SMA)
-	window := 9
 	for i := 0; i < len(macdValue); i++ {
 
 		sum := 0.0
 		isOufOfTarget := false
-		for j := 0; j < window; j++ {
+		for j := 0; j < windowMacdSignal; j++ {
 			idx := i + j
 			if idx >= len(macdValue) || math.IsNaN(macdValue[idx]) {
 				isOufOfTarget = true
@@ -307,13 +309,13 @@ func calcMACD(shortEma []float64, longEma []float64) ([]float64, []float64, []fl
 			macdSignal[i] = math.NaN()
 			macdHisto[i] = math.NaN()
 		} else {
-			macdSignal[i] = sum / float64(window)
+			macdSignal[i] = sum / float64(windowMacdSignal)
 			macdHisto[i] = macdValue[i] - macdSignal[i]
 		}
 	}
 
 	// シグナルラインの計算を行う(EMA)
-	macdEmaSignal = calculateEMA(macdValue, window)
+	macdEmaSignal = calculateEMA(macdValue, windowMacdSignal)
 	for i := 0; i < len(macdValue); i++ {
 		if math.IsNaN(macdEmaSignal[i]) {
 			macdEmaHisto[i] = math.NaN()
@@ -597,8 +599,8 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 
 		// Nanが発生してしまうデータを出力しない
 		// 30日間移動平均でデータ数が30未満だとNaNが発生してしまう
-		// MACDシグナルを計算するために、さらに9日間のデータがないとNanが発生する
-		if i >= len(synthesisStockData)-termDay[Term30] {
+		// MACDシグナルを計算するために、さらにwindowMacdSignal-1(8)日間のデータがないとNanが発生する
+		if i >= len(synthesisStockData)-termDay[Term30]-windowMacdSignal+1 {
 			break
 		}
 
