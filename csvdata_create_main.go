@@ -127,9 +127,11 @@ func readCommonCsv() []CommonInformation {
 			parseDate[idx], _ = convert.ConvertStringToTime(v[0])
 			for j := 0; j < nMetirc; j++ {
 				// j番目のメトリックスを取得(csvは0カラム目が日付なのでj+1を取得)
-				metricV[j][idx], _ = strconv.ParseFloat(v[j+1], 64)
-				if metricV[j][idx] == 0 {
+				if len(v[j+1]) != 0 {
+					metricV[j][idx], _ = strconv.ParseFloat(v[j+1], 64)
+				} else {
 					isLinearRegressio[j] = true
+					metricV[j][idx] = math.Inf(1)
 				}
 			}
 		}
@@ -141,7 +143,7 @@ func readCommonCsv() []CommonInformation {
 
 				var x, y, predictX []float64
 				for idx := 0; idx < dataLen; idx++ {
-					if metricV[i][idx] != 0.0 {
+					if math.IsInf(metricV[i][idx], 1) != true {
 						x = append(x, float64(idx))
 						y = append(y, metricV[i][idx])
 					} else {
@@ -151,6 +153,7 @@ func readCommonCsv() []CommonInformation {
 				predictY := linearRegression(x, y, predictX)
 				for j, v := range predictY {
 					metricV[i][int(predictX[j])] = v
+					slog.Info("predict", "type", i, "idx", predictX[j], "v", v)
 				}
 			}
 		}
