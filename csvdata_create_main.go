@@ -153,7 +153,7 @@ func readCommonCsv() []CommonInformation {
 				predictY := linearRegression(x, y, predictX)
 				for j, v := range predictY {
 					metricV[i][int(predictX[j])] = v
-					slog.Info("predict", "type", i, "idx", predictX[j], "v", v)
+					//slog.Info("predict", "type", i, "idx", predictX[j], "v", v)
 				}
 			}
 		}
