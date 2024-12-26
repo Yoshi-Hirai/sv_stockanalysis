@@ -22,6 +22,8 @@ const ResourceDir = "Resource/"
 const RawDataFileName = "RawData.csv"
 const ModelDataFileName = "ModelData.csv"
 
+var nowObtain = Forex
+
 type ObtainType int
 
 const (
@@ -43,11 +45,13 @@ const (
 
 // 共通情報構造体
 type CommonInformation struct {
-	ParseDate       time.Time `json:"parsedate"`       //	日付
-	InterestRJpn    float64   `json:"interestrjpn"`    //	金利日本
-	InterestRUsa    float64   `json:"interestrusa"`    //	金利アメリカ
-	InterestREuro   float64   `json:"interestreuro"`   //	金利ユーロ
-	UnemployRateJpn float64   `json:"unemployratejpn"` //　失業率日本
+	ParseDate        time.Time `json:"parsedate"`        //	日付
+	InterestRateJpn  float64   `json:"InterestRatejpn"`  //	金利日本
+	InterestRateUsa  float64   `json:"InterestRateusa"`  //	金利アメリカ
+	InterestRateEuro float64   `json:"InterestRateeuro"` //	金利ユーロ
+	UnemployRateJpn  float64   `json:"unemployratejpn"`  //	失業率日本
+	UnemployRateUsa  float64   `json:"unemployrateusa"`  //	失業率アメリカ
+	UnemployRateEuro float64   `json:"unemployrateeuro"` //	失業率ユーロ
 }
 
 // 銘柄情報構造体
@@ -89,13 +93,12 @@ var termDay = []int{
 }
 var windowMacdSignal = 9
 
-var nowObtain = Forex
-
 // ---- public function ----
 
 // ---- private function
 
 // 共通データのCSVを読み込む
+// 値がないデータは線形回帰を行う
 func readCommonCsv() []CommonInformation {
 
 	var retData []CommonInformation
@@ -105,21 +108,64 @@ func readCommonCsv() []CommonInformation {
 		slog.Info("FileReadError", "err", err)
 	} else {
 
+		const nMetirc = 6 // 共通CSV(CommonData.csv)にあるメトリック種類数
+		const nData = 50  // 共通CSV(CommonData.csv)にあるメトリックデータ数(多めに)
+		fileLen := len(fileContents)
+		dataLen := fileLen - 1              // 実際のデータ数
+		var parseDate [nData]time.Time      // 時系列昇順(csvの並びと反対)
+		var metricV [nMetirc][nData]float64 // 時系列昇順(csvの並びと反対)
+		var isLinearRegressio [nMetirc]bool
+
+		// CSVを読み線形回帰が必要かを判定
 		for i, v := range fileContents {
 			// 先頭はタイトル行なのでSkip
 			if i == 0 {
 				continue
 			}
 
-			var single CommonInformation
-			single.ParseDate, err = convert.ConvertStringToTime(v[0])
-			if err != nil {
-				slog.Info("err", "err", err)
+			idx := fileLen - i - 1
+			parseDate[idx], _ = convert.ConvertStringToTime(v[0])
+			for j := 0; j < nMetirc; j++ {
+				// j番目のメトリックスを取得(csvは0カラム目が日付なのでj+1を取得)
+				metricV[j][idx], _ = strconv.ParseFloat(v[j+1], 64)
+				if metricV[j][idx] == 0 {
+					isLinearRegressio[j] = true
+				}
 			}
-			single.InterestRJpn, _ = strconv.ParseFloat(v[1], 64)
-			single.InterestRUsa, _ = strconv.ParseFloat(v[2], 64)
-			single.InterestREuro, _ = strconv.ParseFloat(v[3], 64)
-			single.UnemployRateJpn, _ = strconv.ParseFloat(v[4], 64)
+		}
+
+		// メトリック毎にチェックして必要であれば線形回帰を実行
+		for i := 0; i < nMetirc; i++ {
+
+			if isLinearRegressio[i] == true {
+
+				var x, y, predictX []float64
+				for idx := 0; idx < dataLen; idx++ {
+					if metricV[i][idx] != 0.0 {
+						x = append(x, float64(idx))
+						y = append(y, metricV[i][idx])
+					} else {
+						predictX = append(predictX, float64(idx))
+					}
+				}
+				predictY := linearRegression(x, y, predictX)
+				for j, v := range predictY {
+					metricV[i][int(predictX[j])] = v
+				}
+			}
+		}
+
+		// CommonInformationに代入
+		for i := 0; i < dataLen; i++ {
+			var single CommonInformation
+			idx := fileLen - i - 1
+			single.ParseDate = parseDate[idx]
+			single.InterestRateJpn = metricV[0][idx]
+			single.InterestRateUsa = metricV[1][idx]
+			single.InterestRateEuro = metricV[2][idx]
+			single.UnemployRateJpn = metricV[3][idx]
+			single.UnemployRateUsa = metricV[4][idx]
+			single.UnemployRateEuro = metricV[5][idx]
 			retData = append(retData, single)
 		}
 	}
@@ -136,6 +182,41 @@ func getCommonInformation(cData []CommonInformation, date time.Time) CommonInfor
 	}
 	var ret CommonInformation
 	return ret
+}
+
+// 線形回帰の関数
+func linearRegression(x []float64, y []float64, predictX []float64) []float64 {
+	// 平均を計算
+	mean := func(values []float64) float64 {
+		sum := 0.0
+		for _, v := range values {
+			sum += v
+		}
+		return sum / float64(len(values))
+	}
+
+	meanX := mean(x)
+	meanY := mean(y)
+
+	// 傾き (a) を計算
+	numerator := 0.0
+	denominator := 0.0
+	for i := range x {
+		numerator += (x[i] - meanX) * (y[i] - meanY)
+		denominator += (x[i] - meanX) * (x[i] - meanX)
+	}
+	a := numerator / denominator
+
+	// 切片 (b) を計算
+	b := meanY - a*meanX
+
+	// 予測値を計算
+	var predictions []float64
+	for _, px := range predictX {
+		predictions = append(predictions, a*px+b)
+	}
+
+	return predictions
 }
 
 // 移動平均を計算する
@@ -589,7 +670,7 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 	} else {
 		if code == "0970" {
 			// ユーロドル
-			lineStr = append(lineStr, "InterestRate(USA)", "InterestRate(EURO)")
+			lineStr = append(lineStr, "InterestRateate(USA)", "InterestRateate(EURO)", "UnemployRateate(USA)", "UnemployRateate(EURO)")
 		}
 	}
 	lineStr = append(lineStr, lineSubStr...)
@@ -616,7 +697,8 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 		} else {
 			if code == "0970" {
 				// ユーロドル
-				lineStr = append(lineStr, strconv.FormatFloat(commonInfo.InterestRUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.InterestREuro, 'f', 5, 64))
+				lineStr = append(lineStr, strconv.FormatFloat(commonInfo.InterestRateUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.InterestRateEuro, 'f', 5, 64),
+					strconv.FormatFloat(commonInfo.UnemployRateUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.UnemployRateEuro, 'f', 5, 64))
 			}
 		}
 		lineStr = append(lineStr, strconv.FormatFloat(c.MovingAve[Term5], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term14], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term30], 'f', 5, 64),
