@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"os/exec"
 	"slices"
 	"sort"
 	"strconv"
@@ -52,6 +53,12 @@ type CommonInformation struct {
 	UnemployRateJpn  float64   `json:"unemployratejpn"`  //	失業率日本
 	UnemployRateUsa  float64   `json:"unemployrateusa"`  //	失業率アメリカ
 	UnemployRateEuro float64   `json:"unemployrateeuro"` //	失業率ユーロ
+	CpiJpn           float64   `json:"cpijpn"`           //	CPI日本
+	CpiUsa           float64   `json:"cpiusa"`           //	CPIアメリカ
+	CpiEuro          float64   `json:"cpieuro"`          //	CPIユーロ
+	GdpJpn           float64   `json:"gdpjpn"`           //	GDP日本
+	GdpUsa           float64   `json:"gdpusa"`           //	GDPアメリカ
+	GdpEuro          float64   `json:"gdpeuro"`          //	GDPユーロ
 }
 
 // 銘柄情報構造体
@@ -108,8 +115,8 @@ func readCommonCsv() []CommonInformation {
 		slog.Info("FileReadError", "err", err)
 	} else {
 
-		const nMetirc = 6 // 共通CSV(CommonData.csv)にあるメトリック種類数
-		const nData = 50  // 共通CSV(CommonData.csv)にあるメトリックデータ数(多めに)
+		const nMetirc = 12 // 共通CSV(CommonData.csv)にあるメトリック種類数
+		const nData = 50   // 共通CSV(CommonData.csv)にあるメトリックデータ数(多めに)
 		fileLen := len(fileContents)
 		dataLen := fileLen - 1              // 実際のデータ数
 		var parseDate [nData]time.Time      // 時系列昇順(csvの並びと反対)
@@ -169,6 +176,12 @@ func readCommonCsv() []CommonInformation {
 			single.UnemployRateJpn = metricV[3][idx]
 			single.UnemployRateUsa = metricV[4][idx]
 			single.UnemployRateEuro = metricV[5][idx]
+			single.CpiJpn = metricV[6][idx]
+			single.CpiUsa = metricV[7][idx]
+			single.CpiEuro = metricV[8][idx]
+			single.GdpJpn = metricV[9][idx]
+			single.GdpUsa = metricV[10][idx]
+			single.GdpEuro = metricV[11][idx]
 			retData = append(retData, single)
 		}
 	}
@@ -673,7 +686,8 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 	} else {
 		if code == "0970" {
 			// ユーロドル
-			lineStr = append(lineStr, "InterestRateate(USA)", "InterestRateate(EURO)", "UnemployRateate(USA)", "UnemployRateate(EURO)")
+			lineStr = append(lineStr, "InterestRateate(USA)", "InterestRateate(EURO)", "UnemployRateate(USA)", "UnemployRateate(EURO)",
+				"CPI(USA)", "CPI(EURO)", "GDP(USA)", "GDP(EURO)")
 		}
 	}
 	lineStr = append(lineStr, lineSubStr...)
@@ -701,7 +715,10 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 			if code == "0970" {
 				// ユーロドル
 				lineStr = append(lineStr, strconv.FormatFloat(commonInfo.InterestRateUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.InterestRateEuro, 'f', 5, 64),
-					strconv.FormatFloat(commonInfo.UnemployRateUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.UnemployRateEuro, 'f', 5, 64))
+					strconv.FormatFloat(commonInfo.UnemployRateUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.UnemployRateEuro, 'f', 5, 64),
+					strconv.FormatFloat(commonInfo.CpiUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.CpiEuro, 'f', 5, 64),
+					strconv.FormatFloat(commonInfo.GdpUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.GdpEuro, 'f', 5, 64),
+				)
 			}
 		}
 		lineStr = append(lineStr, strconv.FormatFloat(c.MovingAve[Term5], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term14], 'f', 5, 64), strconv.FormatFloat(c.MovingAve[Term30], 'f', 5, 64),
@@ -746,4 +763,15 @@ func main() {
 	//lambda.Start(checkJraEntries)
 	commonData := readCommonCsv()
 	csvCreationOneStockBrand(StockCode, commonData)
+
+	// pythonテスト
+	// Pythonスクリプトのコマンドを構築
+	cmd := exec.Command("python", "arima_insights.py")
+	// コマンド実行と結果取得
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Println("ARIMA Prediction Result:", string(output))
 }
