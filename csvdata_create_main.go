@@ -18,7 +18,7 @@ import (
 )
 
 // ---- const
-const StockCode = "0970"
+const StockCode = "0952"
 const ResourceDir = "Resource/"
 const RawDataFileName = "RawData.csv"
 const ModelDataFileName = "ModelData.csv"
@@ -50,15 +50,20 @@ type CommonInformation struct {
 	InterestRateJpn  float64   `json:"InterestRatejpn"`  //	金利日本
 	InterestRateUsa  float64   `json:"InterestRateusa"`  //	金利アメリカ
 	InterestRateEuro float64   `json:"InterestRateeuro"` //	金利ユーロ
+	InterestRateUk   float64   `json:"InterestRateuk"`   //	金利イギリス
 	UnemployRateJpn  float64   `json:"unemployratejpn"`  //	失業率日本
 	UnemployRateUsa  float64   `json:"unemployrateusa"`  //	失業率アメリカ
 	UnemployRateEuro float64   `json:"unemployrateeuro"` //	失業率ユーロ
+	UnemployRateUk   float64   `json:"unemployrateuk"`   //	失業率イギリス
 	CpiJpn           float64   `json:"cpijpn"`           //	CPI日本
 	CpiUsa           float64   `json:"cpiusa"`           //	CPIアメリカ
 	CpiEuro          float64   `json:"cpieuro"`          //	CPIユーロ
+	CpiUk            float64   `json:"cpiuk"`            //	CPIイギリス
 	GdpJpn           float64   `json:"gdpjpn"`           //	GDP日本
 	GdpUsa           float64   `json:"gdpusa"`           //	GDPアメリカ
 	GdpEuro          float64   `json:"gdpeuro"`          //	GDPユーロ
+	GdpUk            float64   `json:"gdpuk"`            //	GDPイギリス
+	Tankan           float64   `json:"tankan"`           // 日銀短観
 }
 
 // 銘柄情報構造体
@@ -115,7 +120,7 @@ func readCommonCsv() []CommonInformation {
 		slog.Info("FileReadError", "err", err)
 	} else {
 
-		const nMetirc = 12 // 共通CSV(CommonData.csv)にあるメトリック種類数
+		const nMetirc = 17 // 共通CSV(CommonData.csv)にあるメトリック種類数
 		const nData = 50   // 共通CSV(CommonData.csv)にあるメトリックデータ数(多めに)
 		fileLen := len(fileContents)
 		dataLen := fileLen - 1              // 実際のデータ数
@@ -173,15 +178,20 @@ func readCommonCsv() []CommonInformation {
 			single.InterestRateJpn = metricV[0][idx]
 			single.InterestRateUsa = metricV[1][idx]
 			single.InterestRateEuro = metricV[2][idx]
-			single.UnemployRateJpn = metricV[3][idx]
-			single.UnemployRateUsa = metricV[4][idx]
-			single.UnemployRateEuro = metricV[5][idx]
-			single.CpiJpn = metricV[6][idx]
-			single.CpiUsa = metricV[7][idx]
-			single.CpiEuro = metricV[8][idx]
-			single.GdpJpn = metricV[9][idx]
-			single.GdpUsa = metricV[10][idx]
-			single.GdpEuro = metricV[11][idx]
+			single.InterestRateUk = metricV[3][idx]
+			single.UnemployRateJpn = metricV[4][idx]
+			single.UnemployRateUsa = metricV[5][idx]
+			single.UnemployRateEuro = metricV[6][idx]
+			single.UnemployRateUk = metricV[7][idx]
+			single.CpiJpn = metricV[8][idx]
+			single.CpiUsa = metricV[9][idx]
+			single.CpiEuro = metricV[10][idx]
+			single.CpiUk = metricV[11][idx]
+			single.GdpJpn = metricV[12][idx]
+			single.GdpUsa = metricV[13][idx]
+			single.GdpEuro = metricV[14][idx]
+			single.GdpUk = metricV[15][idx]
+			single.Tankan = metricV[16][idx]
 			retData = append(retData, single)
 		}
 	}
@@ -688,6 +698,10 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 			// ユーロドル
 			lineStr = append(lineStr, "InterestRateate(USA)", "InterestRateate(EURO)", "UnemployRateate(USA)", "UnemployRateate(EURO)",
 				"CPI(USA)", "CPI(EURO)", "GDP(USA)", "GDP(EURO)")
+		} else if code == "0952" {
+			// ポンド円
+			lineStr = append(lineStr, "InterestRateate(UK)", "InterestRateate(JPN)", "UnemployRateate(UK)", "UnemployRateate(JPN)",
+				"CPI(UK)", "CPI(JPN)", "GDP(UK)", "GDP(JPN)")
 		}
 	}
 	lineStr = append(lineStr, lineSubStr...)
@@ -718,6 +732,13 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 					strconv.FormatFloat(commonInfo.UnemployRateUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.UnemployRateEuro, 'f', 5, 64),
 					strconv.FormatFloat(commonInfo.CpiUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.CpiEuro, 'f', 5, 64),
 					strconv.FormatFloat(commonInfo.GdpUsa, 'f', 5, 64), strconv.FormatFloat(commonInfo.GdpEuro, 'f', 5, 64),
+				)
+			} else if code == "0952" {
+				// ポンド円
+				lineStr = append(lineStr, strconv.FormatFloat(commonInfo.InterestRateUk, 'f', 5, 64), strconv.FormatFloat(commonInfo.InterestRateJpn, 'f', 5, 64),
+					strconv.FormatFloat(commonInfo.UnemployRateUk, 'f', 5, 64), strconv.FormatFloat(commonInfo.UnemployRateJpn, 'f', 5, 64),
+					strconv.FormatFloat(commonInfo.CpiUk, 'f', 5, 64), strconv.FormatFloat(commonInfo.CpiJpn, 'f', 5, 64),
+					strconv.FormatFloat(commonInfo.GdpUk, 'f', 5, 64), strconv.FormatFloat(commonInfo.GdpJpn, 'f', 5, 64),
 				)
 			}
 		}
