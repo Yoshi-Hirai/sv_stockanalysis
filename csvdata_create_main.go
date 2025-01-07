@@ -18,12 +18,12 @@ import (
 )
 
 // ---- const
-const StockCode = "0952"
+const StockCode = "7779"
 const ResourceDir = "Resource/"
 const RawDataFileName = "RawData.csv"
 const ModelDataFileName = "ModelData.csv"
 
-var nowObtain = Forex
+var nowObtain = Stock
 
 type ObtainType int
 
@@ -692,7 +692,7 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 		"shortMACD", "shortMACDSignalSMA", "shortMACDHistoSMA", "shortMACDSignalEMA", "shortMACDHistoEMA", "longMACD", "longMACDSignalSMA", "longMACDHistoSMA", "longMACDSignalEMA", "longMACDHistoEMA",
 		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30"}
 	if nowObtain != Forex {
-		lineStr = append(lineStr, "Volume")
+		lineStr = append(lineStr, "Volume", "InterestRateate", "UnemployRateate", "CPI", "GDP", "Tankan")
 	} else {
 		if code == "0970" {
 			// ユーロドル
@@ -724,7 +724,9 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 
 		lineStr = append(lineStr, dateSlice[0], c.ParseDate.Weekday().String(), strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64), strconv.FormatFloat(c.Closing, 'f', 5, 64))
 		if nowObtain != Forex {
-			lineStr = append(lineStr, strconv.FormatFloat(c.Volume, 'f', 5, 64))
+			lineStr = append(lineStr, strconv.FormatFloat(c.Volume, 'f', 5, 64),
+				strconv.FormatFloat(commonInfo.InterestRateJpn, 'f', 5, 64), strconv.FormatFloat(commonInfo.UnemployRateJpn, 'f', 5, 64),
+				strconv.FormatFloat(commonInfo.CpiJpn, 'f', 5, 64), strconv.FormatFloat(commonInfo.GdpJpn, 'f', 5, 64), strconv.FormatFloat(commonInfo.Tankan, 'f', 5, 64))
 		} else {
 			if code == "0970" {
 				// ユーロドル
