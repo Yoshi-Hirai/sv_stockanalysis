@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -18,12 +20,12 @@ import (
 )
 
 // ---- const
-const StockCode = "7779"
+const StockCode = "0970"
 const ResourceDir = "Resource/"
 const RawDataFileName = "RawData.csv"
 const ModelDataFileName = "ModelData.csv"
 
-var nowObtain = Stock
+var nowObtain = Forex
 
 type ObtainType int
 
@@ -92,6 +94,18 @@ type StockBrandInformation struct {
 	LongMacdSmaHisto  float64          `json:"longmacdsmahisto"`  // SMA-MACDヒストグラム(長期間)
 	LongMacdEmaSig    float64          `json:"longmacdemasig"`    // EMA-MACDシグナルライン(長期間)
 	LongMacdEmaHisto  float64          `json:"longmacdemahisto"`  // EMA-MACDヒストグラム(長期間)
+}
+
+// ARIMA予測結果構造体
+type ArimaPredictionResultInformation struct {
+	Date                  string  `json:"date"`
+	Opening               float64 `json:"opening"` //	始値
+	High                  float64 `json:"high"`    //	高値
+	Low                   float64 `json:"low"`     //	安値
+	Closing               float64 `json:"closing"` //	終値
+	Volume                float64 `json:"volume"`  //	出来高
+	Arima_Prediction      float64 `json:"arima_prediction"`
+	Prediction_Difference float64 `json:"prediction_difference"`
 }
 
 // ---- Global Variable
@@ -685,14 +699,14 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 
 	// CSVに出力するように文字列に変換。日付フォーマットを time.DateTime から　yyyy/mm/dd へ変更する。
 	var outputStr [][]string
-	var lineStr []string = []string{"date", "DayOfWeek", "Opening", "High", "Low", "Closing"}
+	var lineStr []string = []string{"date", "DayOfWeek", "opening", "high", "low", "closing"}
 	var lineSubStr []string = []string{"MovingAve5", "MovingAve14", "MovingAve30", "Volatility5", "Volatility14", "Volatility30",
 		"HighLowVolatility5", "HighLowVolatility14", "HighLowVolatility30",
 		"ATR5", "ATR14", "ATR30", "MADRate5", "MADRate14", "MADRate30", "RSI5", "RSI14", "RSI30",
 		"shortMACD", "shortMACDSignalSMA", "shortMACDHistoSMA", "shortMACDSignalEMA", "shortMACDHistoEMA", "longMACD", "longMACDSignalSMA", "longMACDHistoSMA", "longMACDSignalEMA", "longMACDHistoEMA",
 		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30"}
 	if nowObtain != Forex {
-		lineStr = append(lineStr, "Volume", "InterestRateate", "UnemployRateate", "CPI", "GDP", "Tankan")
+		lineStr = append(lineStr, "volume", "InterestRateate", "UnemployRateate", "CPI", "GDP", "Tankan")
 	} else {
 		if code == "0970" {
 			// ユーロドル
@@ -763,7 +777,7 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 	slog.Info("Final Component", "Data", len(synthesisStockData), "output", len(outputStr))
 
 	// 基本データをRawDataディレクトリに出力
-	var rawLineStr []string = []string{"date", "Opening", "High", "Low", "Closing", "Volume"}
+	var rawLineStr []string = []string{"date", "opening", "high", "low", "closing", "volume"}
 	outputStr = nil
 	outputStr = append(outputStr, rawLineStr)
 	for _, c := range synthesisStockData {
@@ -789,12 +803,22 @@ func main() {
 
 	// pythonテスト
 	// Pythonスクリプトのコマンドを構築
-	cmd := exec.Command("python", "arima_insights.py")
+	cmd := exec.Command("python", "arima_insights.py", "Resource/0970/RawData.csv")
 	// コマンド実行と結果取得
-	output, err := cmd.Output()
+	var stdOutBuff, stdErrBuff bytes.Buffer
+	cmd.Stdout = &stdOutBuff
+	cmd.Stderr = &stdErrBuff
+	err := cmd.Run()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
 	}
-	fmt.Println("ARIMA Prediction Result:", string(output))
+	stdOutStr := stdOutBuff.String()
+
+	var arimaPredictResult []ArimaPredictionResultInformation
+	err = json.Unmarshal([]byte(stdOutStr), &arimaPredictResult)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 }
