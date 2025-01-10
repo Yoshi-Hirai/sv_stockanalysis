@@ -20,12 +20,12 @@ import (
 )
 
 // ---- const
-const StockCode = "0970"
+const StockCode = "7779"
 const ResourceDir = "Resource/"
 const RawDataFileName = "RawData.csv"
 const ModelDataFileName = "ModelData.csv"
 
-var nowObtain = Forex
+var nowObtain = Stock
 
 type ObtainType int
 
@@ -744,7 +744,7 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 		return
 	}
 	for _, c := range arimaPredictionResult {
-		slog.Info("Arima", "date", c.Date, "predict", c.Arima_Prediction)
+		slog.Info("Arima", "date", c.Date, "predict", c.Arima_Prediction, "Diff", c.Prediction_Difference)
 	}
 
 	// CSVに出力するように文字列に変換。日付フォーマットを time.DateTime から　yyyy/mm/dd へ変更する。
@@ -754,7 +754,8 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 		"HighLowVolatility5", "HighLowVolatility14", "HighLowVolatility30",
 		"ATR5", "ATR14", "ATR30", "MADRate5", "MADRate14", "MADRate30", "RSI5", "RSI14", "RSI30",
 		"shortMACD", "shortMACDSignalSMA", "shortMACDHistoSMA", "shortMACDSignalEMA", "shortMACDHistoEMA", "longMACD", "longMACDSignalSMA", "longMACDHistoSMA", "longMACDSignalEMA", "longMACDHistoEMA",
-		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30"}
+		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30",
+		"ARIMAPredict", "ARIMAPredictDiff"}
 	if nowObtain != Forex {
 		lineStr = append(lineStr, "volume", "InterestRateate", "UnemployRateate", "CPI", "GDP", "Tankan")
 	} else {
@@ -782,6 +783,15 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 
 		lineStr = nil
 		commonInfo := getCommonInformation(cData, c.ParseDate)
+		var arimaC ArimaPredictionResultInformation
+		for arimaI, _ := range arimaPredictionResult {
+			if c.ParseDate.Year() == arimaPredictionResult[arimaI].ParseDate.Year() &&
+				c.ParseDate.Month() == arimaPredictionResult[arimaI].ParseDate.Month() &&
+				c.ParseDate.Day() == arimaPredictionResult[arimaI].ParseDate.Day() {
+				arimaC = arimaPredictionResult[arimaI]
+				break
+			}
+		}
 		dateStr := c.ParseDate.Format(time.DateTime)
 		dateSlice := strings.Split(dateStr, " ")
 		dateSlice[0] = strings.ReplaceAll(dateSlice[0], "-", "/")
@@ -820,6 +830,7 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 			strconv.FormatFloat(c.LongMacdEmaSig, 'f', 5, 64), strconv.FormatFloat(c.LongMacdEmaHisto, 'f', 5, 64),
 			strconv.FormatFloat(c.UpperBBand[Term5], 'f', 5, 64), strconv.FormatFloat(c.UpperBBand[Term14], 'f', 5, 64), strconv.FormatFloat(c.UpperBBand[Term30], 'f', 5, 64),
 			strconv.FormatFloat(c.UnderBBand[Term5], 'f', 5, 64), strconv.FormatFloat(c.UnderBBand[Term14], 'f', 5, 64), strconv.FormatFloat(c.UnderBBand[Term30], 'f', 5, 64),
+			strconv.FormatFloat(arimaC.Arima_Prediction, 'f', 7, 64), strconv.FormatFloat(arimaC.Prediction_Difference, 'f', 7, 64),
 		)
 		outputStr = append(outputStr, lineStr)
 	}
