@@ -98,14 +98,15 @@ type StockBrandInformation struct {
 
 // ARIMA予測結果構造体
 type ArimaPredictionResultInformation struct {
-	Date                  string  `json:"date"`
-	Opening               float64 `json:"opening"` //	始値
-	High                  float64 `json:"high"`    //	高値
-	Low                   float64 `json:"low"`     //	安値
-	Closing               float64 `json:"closing"` //	終値
-	Volume                float64 `json:"volume"`  //	出来高
-	Arima_Prediction      float64 `json:"arima_prediction"`
-	Prediction_Difference float64 `json:"prediction_difference"`
+	Date                  string    `json:"date"`
+	ParseDate             time.Time `json:"parsedate"`
+	Opening               float64   `json:"opening"` //	始値
+	High                  float64   `json:"high"`    //	高値
+	Low                   float64   `json:"low"`     //	安値
+	Closing               float64   `json:"closing"` //	終値
+	Volume                float64   `json:"volume"`  //	出来高
+	Arima_Prediction      float64   `json:"arima_prediction"`
+	Prediction_Difference float64   `json:"prediction_difference"`
 }
 
 // ---- Global Variable
@@ -681,6 +682,45 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 	return stockData
 }
 
+// ARIMA予測モデルのpythonファイルを実行し予測結果を取得する
+func arimaPrediction(csvfile string) ([]ArimaPredictionResultInformation, error) {
+
+	// Pythonスクリプトのコマンドを構築
+	cmd := exec.Command("python", "arima_insights.py", csvfile)
+	// コマンド実行と結果取得
+	var stdOutBuff, stdErrBuff bytes.Buffer
+	cmd.Stdout = &stdOutBuff
+	cmd.Stderr = &stdErrBuff
+	err := cmd.Run()
+	if err != nil {
+		slog.Info("err", "err", err)
+		return nil, err
+	}
+	stdOutStr := stdOutBuff.String()
+
+	// JSON -> 構造体へ
+	var arimaPredictResult []ArimaPredictionResultInformation
+	err = json.Unmarshal([]byte(stdOutStr), &arimaPredictResult)
+	if err != nil {
+		slog.Info("err", "err", err)
+		return nil, err
+	}
+
+	// time.Time を求める
+	for i := 0; i < len(arimaPredictResult); i++ {
+
+		// フォーマットを指定
+		layout := "2006-01-02T15:04:05.000"
+		// パース
+		arimaPredictResult[i].ParseDate, err = time.Parse(layout, arimaPredictResult[i].Date)
+		if err != nil {
+			slog.Info("Error parsing time", "err", err)
+			return nil, err
+		}
+	}
+	return arimaPredictResult, nil
+}
+
 // 該当銘柄のcsvデータを作成する
 func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 
@@ -696,6 +736,16 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 
 	// 移動平均、ボラティリティの計算
 	synthesisStockData = calculateTechnicalIndex(synthesisStockData)
+
+	// ARIMA予測モデル計算
+	arimaPredictionResult, errArima := arimaPrediction(rawCsvFileName)
+	if errArima != nil {
+		slog.Info("ARIMA Prediction Err.", "error=", errArima)
+		return
+	}
+	for _, c := range arimaPredictionResult {
+		slog.Info("Arima", "date", c.Date, "predict", c.Arima_Prediction)
+	}
 
 	// CSVに出力するように文字列に変換。日付フォーマットを time.DateTime から　yyyy/mm/dd へ変更する。
 	var outputStr [][]string
@@ -801,24 +851,4 @@ func main() {
 	commonData := readCommonCsv()
 	csvCreationOneStockBrand(StockCode, commonData)
 
-	// pythonテスト
-	// Pythonスクリプトのコマンドを構築
-	cmd := exec.Command("python", "arima_insights.py", "Resource/0970/RawData.csv")
-	// コマンド実行と結果取得
-	var stdOutBuff, stdErrBuff bytes.Buffer
-	cmd.Stdout = &stdOutBuff
-	cmd.Stderr = &stdErrBuff
-	err := cmd.Run()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	stdOutStr := stdOutBuff.String()
-
-	var arimaPredictResult []ArimaPredictionResultInformation
-	err = json.Unmarshal([]byte(stdOutStr), &arimaPredictResult)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
 }
