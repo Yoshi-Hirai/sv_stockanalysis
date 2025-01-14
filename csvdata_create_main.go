@@ -20,7 +20,7 @@ import (
 )
 
 // ---- const
-const StockCode = "7779"
+const StockCode = "2181"
 const ResourceDir = "Resource/"
 const RawDataFileName = "RawData.csv"
 const ModelDataFileName = "ModelData.csv"
@@ -796,7 +796,7 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 		dateSlice := strings.Split(dateStr, " ")
 		dateSlice[0] = strings.ReplaceAll(dateSlice[0], "-", "/")
 
-		lineStr = append(lineStr, dateSlice[0], c.ParseDate.Weekday().String(), strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64), strconv.FormatFloat(c.Closing, 'f', 5, 64))
+		lineStr = append(lineStr, dateSlice[0], strconv.Itoa(int(c.ParseDate.Weekday())), strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64), strconv.FormatFloat(c.Closing, 'f', 5, 64))
 		if nowObtain != Forex {
 			lineStr = append(lineStr, strconv.FormatFloat(c.Volume, 'f', 5, 64),
 				strconv.FormatFloat(commonInfo.InterestRateJpn, 'f', 5, 64), strconv.FormatFloat(commonInfo.UnemployRateJpn, 'f', 5, 64),
