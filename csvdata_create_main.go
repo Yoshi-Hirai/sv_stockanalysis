@@ -743,9 +743,11 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 		slog.Info("ARIMA Prediction Err.", "error=", errArima)
 		return
 	}
-	for _, c := range arimaPredictionResult {
-		slog.Info("Arima", "date", c.Date, "predict", c.Arima_Prediction, "Diff", c.Prediction_Difference)
-	}
+	/*
+		for _, c := range arimaPredictionResult {
+			slog.Info("Arima", "date", c.Date, "predict", c.Arima_Prediction, "Diff", c.Prediction_Difference)
+		}
+	*/
 
 	// CSVに出力するように文字列に変換。日付フォーマットを time.DateTime から　yyyy/mm/dd へ変更する。
 	var outputStr [][]string
