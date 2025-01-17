@@ -20,8 +20,9 @@ import (
 )
 
 // ---- const
-const StockCode = "2181"
+const StockCode = "9553"
 const ResourceDir = "Resource/"
+const S3BucketName = "for-stock-fx-analysis"
 const RawDataFileName = "RawData.csv"
 const ModelDataFileName = "ModelData.csv"
 
@@ -98,15 +99,16 @@ type StockBrandInformation struct {
 
 // ARIMA予測結果構造体
 type ArimaPredictionResultInformation struct {
-	Date                  string    `json:"date"`
-	ParseDate             time.Time `json:"parsedate"`
-	Opening               float64   `json:"opening"` //	始値
-	High                  float64   `json:"high"`    //	高値
-	Low                   float64   `json:"low"`     //	安値
-	Closing               float64   `json:"closing"` //	終値
-	Volume                float64   `json:"volume"`  //	出来高
-	Arima_Prediction      float64   `json:"arima_prediction"`
-	Prediction_Difference float64   `json:"prediction_difference"`
+	Date                    string    `json:"date"`
+	ParseDate               time.Time `json:"parsedate"`
+	Opening                 float64   `json:"opening"` //	始値
+	High                    float64   `json:"high"`    //	高値
+	Low                     float64   `json:"low"`     //	安値
+	Closing                 float64   `json:"closing"` //	終値
+	Volume                  float64   `json:"volume"`  //	出来高
+	Arima_Diff_Prediction   float64   `json:"arima_diff_prediction`
+	Arima_Actual_Prediction float64   `json:"arima_actual_prediction"`
+	Prediction_Difference   float64   `json:"prediction_difference"`
 }
 
 // ---- Global Variable
@@ -738,10 +740,14 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 	synthesisStockData = calculateTechnicalIndex(synthesisStockData)
 
 	// ARIMA予測モデル計算
-	arimaPredictionResult, errArima := arimaPrediction(rawCsvFileName)
-	if errArima != nil {
-		slog.Info("ARIMA Prediction Err.", "error=", errArima)
-		return
+	var arimaPredictionResult []ArimaPredictionResultInformation
+	var errArima error
+	if isInitialCreation == false {
+		arimaPredictionResult, errArima = arimaPrediction(rawCsvFileName)
+		if errArima != nil {
+			slog.Info("ARIMA Prediction Err.", "error", errArima)
+			return
+		}
 	}
 	/*
 		for _, c := range arimaPredictionResult {
@@ -832,11 +838,13 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 			strconv.FormatFloat(c.LongMacdEmaSig, 'f', 5, 64), strconv.FormatFloat(c.LongMacdEmaHisto, 'f', 5, 64),
 			strconv.FormatFloat(c.UpperBBand[Term5], 'f', 5, 64), strconv.FormatFloat(c.UpperBBand[Term14], 'f', 5, 64), strconv.FormatFloat(c.UpperBBand[Term30], 'f', 5, 64),
 			strconv.FormatFloat(c.UnderBBand[Term5], 'f', 5, 64), strconv.FormatFloat(c.UnderBBand[Term14], 'f', 5, 64), strconv.FormatFloat(c.UnderBBand[Term30], 'f', 5, 64),
-			strconv.FormatFloat(arimaC.Arima_Prediction, 'f', 7, 64), strconv.FormatFloat(arimaC.Prediction_Difference, 'f', 7, 64),
+			strconv.FormatFloat(arimaC.Arima_Actual_Prediction, 'f', 7, 64), strconv.FormatFloat(arimaC.Prediction_Difference, 'f', 7, 64),
 		)
 		outputStr = append(outputStr, lineStr)
 	}
 	_ = fileio.FileIoCsvWrite(modelCsvFileName, outputStr, false)
+	s3Key := fmt.Sprintf("%s/%s", code, ModelDataFileName)
+	_ = fileio.UploadFileToS3(S3BucketName, modelCsvFileName, s3Key)
 	slog.Info("Final Component", "Data", len(synthesisStockData), "output", len(outputStr))
 
 	// 基本データをRawDataディレクトリに出力
