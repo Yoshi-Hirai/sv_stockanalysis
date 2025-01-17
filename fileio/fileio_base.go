@@ -2,10 +2,16 @@
 package fileio // パッケージ名はディレクトリ名と同じにする
 
 import (
+	"context"
 	"encoding/csv"
+	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/goccy/go-json"
 )
 
@@ -120,6 +126,38 @@ func FileIoJsonWrite(filename string, body any, isAppend bool) error {
 		return errWrite
 	}
 
+	return nil
+}
+
+// S3へのファイルアップロード(C:\Users\<YourUsername>\.aws\credentialsを使用)
+func UploadFileToS3(bucketName, filePath, key string) error {
+	// Load AWS config
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		return fmt.Errorf("failed to load AWS configuration: %w", err)
+	}
+
+	// Create S3 client
+	client := s3.NewFromConfig(cfg)
+
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	// Upload the file to S3
+	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(key),
+		Body:   file,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload file: %w", err)
+	}
+
+	slog.Info("File uploaded successfully", "bucket", bucketName, "key", key)
 	return nil
 }
 
