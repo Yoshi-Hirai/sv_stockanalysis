@@ -20,7 +20,7 @@ import (
 )
 
 // ---- const
-const StockCode = "9553"
+const StockCode = "7779"
 const ResourceDir = "Resource/"
 const S3BucketName = "for-stock-fx-analysis"
 const RawDataFileName = "RawData.csv"
@@ -95,6 +95,9 @@ type StockBrandInformation struct {
 	LongMacdSmaHisto  float64          `json:"longmacdsmahisto"`  // SMA-MACDヒストグラム(長期間)
 	LongMacdEmaSig    float64          `json:"longmacdemasig"`    // EMA-MACDシグナルライン(長期間)
 	LongMacdEmaHisto  float64          `json:"longmacdemahisto"`  // EMA-MACDヒストグラム(長期間)
+	VolumeChangeRate  float64          `json:"volumechangerate"`  // 出来高変化率
+	VolumeMovingAve   [TermNum]float64 `json:"volumemovingave"`   // 出来高移動平均配列
+	VolumeRatio       [TermNum]float64 `json:"volumeratio"`       // 出来高移動平均比率
 }
 
 // ARIMA予測結果構造体
@@ -609,7 +612,7 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 		for i := 0; i < dataLen; i++ {
 
 			const bollingerBandK = 2
-			var price, priceDiff, trueRange []float64
+			var price, priceDiff, trueRange, volume []float64
 			for idx := i; idx < i+termDay[mAveType]; idx++ {
 				if idx < dataLen {
 					price = append(price, stockData[idx].Closing)
@@ -619,6 +622,7 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 							math.Abs(stockData[idx].High - stockData[idx+1].Closing), math.Abs(stockData[idx].Low - stockData[idx+1].Closing)}
 						trueRange = append(trueRange, slices.Max(candidate))
 					}
+					volume = append(volume, stockData[idx].Volume)
 				}
 			}
 			if len(price) == termDay[mAveType] {
@@ -627,12 +631,16 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 				stockData[i].MADRate[mAveType] = calcMADRate(stockData[i].Closing, stockData[i].MovingAve[mAveType])
 				stockData[i].UpperBBand[mAveType] = stockData[i].MovingAve[mAveType] + (bollingerBandK * stockData[i].Volatility[mAveType])
 				stockData[i].UnderBBand[mAveType] = stockData[i].MovingAve[mAveType] - (bollingerBandK * stockData[i].Volatility[mAveType])
+				stockData[i].VolumeMovingAve[mAveType] = calcMovingAverage(volume)
+				stockData[i].VolumeRatio[mAveType] = stockData[i].Volume / stockData[i].VolumeMovingAve[mAveType]
 			} else {
 				stockData[i].MovingAve[mAveType] = math.NaN()
 				stockData[i].Volatility[mAveType] = math.NaN()
 				stockData[i].MADRate[mAveType] = math.NaN()
 				stockData[i].UpperBBand[mAveType] = math.NaN()
 				stockData[i].UnderBBand[mAveType] = math.NaN()
+				stockData[i].VolumeMovingAve[mAveType] = math.NaN()
+				stockData[i].VolumeRatio[mAveType] = math.NaN()
 			}
 			if len(priceDiff) == termDay[mAveType] {
 				stockData[i].HighLowVolatility[mAveType] = calcMovingAverage(priceDiff)
@@ -679,6 +687,13 @@ func calculateTechnicalIndex(stockData []StockBrandInformation) []StockBrandInfo
 		stockData[i].LongMacdSmaHisto = tmpMACDHisto[i]
 		stockData[i].LongMacdEmaSig = tmpMACDEMASignal[i]
 		stockData[i].LongMacdEmaHisto = tmpMACDEMAHisto[i]
+	}
+
+	//	出来高変化率
+	for i := 0; i < dataLen; i++ {
+		if i+1 < dataLen && stockData[i+1].Volume > 0 {
+			stockData[i].VolumeChangeRate = (stockData[i].Volume - stockData[i+1].Volume) / stockData[i+1].Volume
+		}
 	}
 
 	return stockData
@@ -765,7 +780,8 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 		"upperBBand5", "upperBBand14", "upperBBand30", "underBBand5", "underBBand14", "underBBand30",
 		"ARIMAPredict", "ARIMAPredictDiff"}
 	if nowObtain != Forex {
-		lineStr = append(lineStr, "volume", "InterestRateate", "UnemployRateate", "CPI", "GDP", "Tankan")
+		lineStr = append(lineStr, "volume", "VCR", "VMovingAve5", "VMovingAve14", "VMovingAve30", "VolumeRatio5", "VolumeRatio14", "VolumeRatio30",
+			"InterestRateate", "UnemployRateate", "CPI", "GDP", "Tankan")
 	} else {
 		if code == "0970" {
 			// ユーロドル
@@ -807,6 +823,9 @@ func csvCreationOneStockBrand(code string, cData []CommonInformation) {
 		lineStr = append(lineStr, dateSlice[0], strconv.Itoa(int(c.ParseDate.Weekday())), strconv.FormatFloat(c.Opening, 'f', 5, 64), strconv.FormatFloat(c.High, 'f', 5, 64), strconv.FormatFloat(c.Low, 'f', 5, 64), strconv.FormatFloat(c.Closing, 'f', 5, 64))
 		if nowObtain != Forex {
 			lineStr = append(lineStr, strconv.FormatFloat(c.Volume, 'f', 5, 64),
+				strconv.FormatFloat(c.VolumeChangeRate, 'f', 5, 64),
+				strconv.FormatFloat(c.VolumeMovingAve[Term5], 'f', 5, 64), strconv.FormatFloat(c.VolumeMovingAve[Term14], 'f', 5, 64), strconv.FormatFloat(c.VolumeMovingAve[Term30], 'f', 5, 64),
+				strconv.FormatFloat(c.VolumeRatio[Term5], 'f', 5, 64), strconv.FormatFloat(c.VolumeRatio[Term14], 'f', 5, 64), strconv.FormatFloat(c.VolumeRatio[Term30], 'f', 5, 64),
 				strconv.FormatFloat(commonInfo.InterestRateJpn, 'f', 5, 64), strconv.FormatFloat(commonInfo.UnemployRateJpn, 'f', 5, 64),
 				strconv.FormatFloat(commonInfo.CpiJpn, 'f', 5, 64), strconv.FormatFloat(commonInfo.GdpJpn, 'f', 5, 64), strconv.FormatFloat(commonInfo.Tankan, 'f', 5, 64))
 		} else {
