@@ -20,7 +20,7 @@ import (
 )
 
 // ---- const
-const StockCode = "7779"
+const StockCode = "2586"
 const ResourceDir = "Resource/"
 const S3BucketName = "for-stock-fx-analysis"
 const RawDataFileName = "RawData.csv"
@@ -729,7 +729,7 @@ func arimaPrediction(csvfile string) ([]ArimaPredictionResultInformation, error)
 	cmd.Stderr = &stdErrBuff
 	err := cmd.Run()
 	if err != nil {
-		slog.Info("err", "err", err)
+		slog.Info("err cmd Run.", "err", err)
 		return nil, err
 	}
 	stdOutStr := stdOutBuff.String()
@@ -738,7 +738,7 @@ func arimaPrediction(csvfile string) ([]ArimaPredictionResultInformation, error)
 	var arimaPredictResult []ArimaPredictionResultInformation
 	err = json.Unmarshal([]byte(stdOutStr), &arimaPredictResult)
 	if err != nil {
-		slog.Info("err", "err", err)
+		slog.Info("err Json Convert.", "err", err)
 		return nil, err
 	}
 
